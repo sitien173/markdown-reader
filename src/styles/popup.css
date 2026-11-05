@@ -1,0 +1,24 @@
+.tds-custom-popup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-12);
+  min-width: 20rem;
+  max-width: 28rem;
+  padding: var(--spacing-16);
+  color: var(--text-default);
+  background: var(--surface-neutral-01);
+}
+
+.tds-custom-popup :focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.tds-custom-popup__recent-url {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

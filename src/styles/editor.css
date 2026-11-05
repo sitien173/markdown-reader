@@ -1,0 +1,9 @@
+.tds-custom-reader__panes { display: grid; gap: var(--gap-lg); min-width: 0; }
+.tds-custom-reader__panes--split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+.tds-custom-editor { min-width: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-neutral-01); overflow: hidden; }
+.tds-custom-editor .cm-editor { font-family: var(--font-family-mono, monospace); font-size: 0.875rem; color: var(--text-default); background: var(--surface-neutral-01); }
+.tds-custom-editor .cm-editor.cm-focused { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+.tds-custom-editor .cm-gutters { background: var(--surface-neutral-02); color: var(--text-caption); border-inline-end: 1px solid var(--border-subtle); }
+.tds-custom-editor .cm-activeLine, .tds-custom-editor .cm-activeLineGutter { background: var(--surface-hover); }
+.tds-custom-editor .cm-selectionBackground, .tds-custom-editor.cm-focused .cm-selectionBackground { background: var(--surface-selected) !important; }
+.tds-custom-editor .cm-cursor { border-left-color: var(--text-default); }

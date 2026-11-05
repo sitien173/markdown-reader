@@ -1,0 +1,93 @@
+@import "./tds/tokens.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "./tds/button.css" layer(components);
+@import "./tds/icon-button.css" layer(components);
+@import "./tds/segmented-control.css" layer(components);
+@import "./tds/text-input.css" layer(components);
+@import "./tds/tabs.css" layer(components);
+@import "./tds/tab-item.css" layer(components);
+@import "./tds/nav-list.css" layer(components);
+@import "./tds/nav-item.css" layer(components);
+@import "./tds/caret.css" layer(components);
+@import "./tds/announcement.css" layer(components);
+@import "./tds/spinner.css" layer(components);
+@import "./tds/dialog.css" layer(components);
+@import "./tds/button-menu.css" layer(components);
+@import "./tds/dropdown-panel.css" layer(components);
+@import "./tds/action-list-item.css" layer(components);
+@import "./tds/tooltip.css" layer(components);
+@import "./tds/field-label.css" layer(components);
+@import "./tds/field-caption.css" layer(components);
+@import "./tds/field-validation.css" layer(components);
+@import "./markdown.css";
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-family);
+}
+
+@theme {
+  --color-*: initial;
+}
+
+:root {
+  --background: var(--surface-neutral-01);
+  --card: var(--surface-neutral-01);
+  --popover: var(--surface-neutral-01);
+  --foreground: var(--text-default);
+  --card-foreground: var(--text-default);
+  --popover-foreground: var(--text-default);
+  --secondary-foreground: var(--text-default);
+  --accent-foreground: var(--text-default);
+  --primary: var(--interactive-default);
+  --primary-foreground: var(--text-inverse);
+  --secondary: var(--surface-neutral-02);
+  --muted: var(--surface-neutral-02);
+  --muted-foreground: var(--text-description);
+  --accent: var(--surface-hover);
+  --destructive: var(--border-negative);
+  --border: var(--border-subtle);
+  --input: var(--border-strong);
+  --ring: var(--border-focus);
+}
+
+.tds-custom-markdown {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-family);
+}
+
+.text-body-xs {
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  font-weight: var(--font-weight-regular);
+}
+
+.text-body-sm {
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  font-weight: var(--font-weight-regular);
+}
+
+.text-body-md {
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-md);
+  font-weight: var(--font-weight-regular);
+}
+
+.text-body-lg {
+  font-family: var(--font-family);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-lg);
+  font-weight: var(--font-weight-regular);
+}

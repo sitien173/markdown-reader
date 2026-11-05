@@ -1,0 +1,9 @@
+.tds-custom-markdown { color: var(--text-default); font-family: var(--font-family); line-height: 1.65; overflow: clip; }
+.tds-custom-markdown h1,.tds-custom-markdown h2,.tds-custom-markdown h3,.tds-custom-markdown h4,.tds-custom-markdown h5,.tds-custom-markdown h6 { font-family: var(--font-family-display); scroll-margin-top: var(--padding-2xl); }
+.tds-custom-markdown pre,.tds-custom-markdown .table-wrapper,.tds-custom-markdown table { overflow: auto; max-width: 100%; }
+.tds-custom-markdown pre,.tds-custom-markdown code { font-family: var(--font-family-mono); }
+.tds-custom-markdown pre { background: var(--surface-neutral-02); padding: var(--padding-lg); }
+.tds-custom-markdown a { color: var(--text-link); }
+.tds-custom-markdown blockquote { border-inline-start: 3px solid var(--border-strong); padding-inline-start: var(--padding-lg); }
+.tds-custom-markdown img { max-width: 100%; }
+@media print { .tds-custom-markdown { overflow: visible; } }
