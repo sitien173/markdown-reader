@@ -1,495 +1,376 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ToggleGroup, ToggleGroupItem } from '../../components/ui/toggle-group';
-import { createDraftSaver, draftKey, loadDraft } from '../../store/drafts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { EditorPane } from '../../ui/editor-pane';
 import type { MarkdownViewHandle } from '../../ui/markdown-view';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { FileHandleSource, SaveConflictError, isValidMarkdownFile, dropFileIdentity } from '../../source/file-handle';
 import { SaveConflictDialog } from '../../ui/save-conflict-dialog';
 import { Button } from '../../components/ui/button';
-import { FileUrlSource } from '../../source/file-url';
-import { isAllowedUrl, UrlSource } from '../../source/url';
-import { usableCapturedText } from '../../source/captured-text';
-import { addRecentUrl, getRecentEntries, type RecentItem } from '../../store/recent';
-import { storeHandle } from '../../store/handles';
-import { DirectorySource, type TreeNode, type FileNode } from '../../source/directory';
+import { Spinner } from '../../components/ui/spinner';
+import { createCommands } from '../../reader/commands';
+import { createController, type ReaderController } from '../../reader/controller';
+import { createReaderStore, ReaderStoreContext, type ReaderStore, selectBanners, useReaderStore } from '../../store/reader-store';
 import { FileTree } from '../../ui/file-tree';
 import { RecentSection } from '../../ui/recent-section';
 import type { Heading } from '../../render/pipeline';
 import { MarkdownView } from '../../ui/markdown-view';
-import { TopBar } from '../../ui/top-bar';
-import { TocPanel } from '../../ui/toc-panel';
-import { Announce } from '../../ui/announce';
+import { Toolbar } from '../../ui/toolbar';
+import { scrollBehavior, TocPanel } from '../../ui/toc-panel';
+import { DropOverlay } from '../../ui/drop-overlay';
+import { OpenUrlDialog } from '../../ui/open-url-dialog';
+import { StatusBanner } from '../../ui/status-banner';
+import { Welcome } from '../../ui/welcome';
+import { notifyToast, Toaster } from '../../components/ui/toast';
+import { bindShortcuts } from '../../reader/shortcuts';
+import { CommandPalette } from '../../ui/command-palette';
 import { downloadHtml, printDocument } from '../../export/export';
 import '../../styles/reader.css';
 import '../../styles/editor.css';
 
-type Mode = 'read' | 'edit' | 'split';
-const MODES: Mode[] = ['read', 'edit', 'split'];
-function parseMode(raw: string | null): Mode { return MODES.includes(raw as Mode) ? (raw as Mode) : 'read'; }
-
 export default function App() {
- const initial = new URLSearchParams(window.location.search).get('src') ?? '';
- const [mode, setModeState] = useState<Mode>(parseMode(new URLSearchParams(window.location.search).get('mode')));
- const [mountText, setMountText] = useState('');
- const [loadId, setLoadId] = useState(0);
- const [dirty, setDirty] = useState(false);
- const draftRef = useRef('');
- const dirtyRef = useRef(false);
- const viewRef = useRef<MarkdownViewHandle | null>(null);
- const saverRef = useRef<ReturnType<typeof createDraftSaver> | null>(null);
- const sourceIdRef = useRef('');
- const sourceGenRef = useRef(0);
- const treeGenRef = useRef(0);
- const activeRef = useRef<FileHandleSource | FileUrlSource | DirectorySource | null>(null);
- const watchRef = useRef<(() => void) | null>(null);
- const stampRef = useRef<number | null>(null);
- const [writable, setWritable] = useState(false), [externalChange, setExternalChange] = useState(false), [conflict, setConflict] = useState(false), [notice, setNotice] = useState('');
- const [source, setSource] = useState(initial), [text, setText] = useState<string | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(false), [headings, setHeadings] = useState<Heading[]>([]);
- const [directorySource, setDirectorySource] = useState<DirectorySource | null>(null);
- const [docPath, setDocPath] = useState<string | null>(null);
- const docPathRef = useRef(docPath);
- docPathRef.current = docPath;
- const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
- const [recents, setRecents] = useState<RecentItem[]>([]);
+  const [controller] = useState(() => createController(createReaderStore(), notifyToast));
+  return (
+    <ReaderStoreContext.Provider value={controller.store}>
+      <Reader controller={controller} />
+      <Toaster />
+    </ReaderStoreContext.Provider>
+  );
+}
 
- const refreshRecents = useCallback(async () => {
-  try {
-    const items = await getRecentEntries();
-    setRecents(items);
-  } catch {
-    // IDB or storage error fallback
-  }
- }, []);
+type RunCommand = (id: string) => void;
 
- useEffect(() => {
-  void refreshRecents();
- }, [refreshRecents]);
+function Reader({ controller }: { controller: ReaderController }) {
+  const viewRef = useRef<MarkdownViewHandle | null>(null);
+  // The shell subscribes only to what it renders itself; every panel below selects its own fields.
+  const focusMode = useReaderStore((s) => s.focusMode);
+  const sidebarOpen = useReaderStore((s) => s.sidebarOpen);
+  const patch = controller.store.setState;
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
- function isCurrent(gen: number, active: FileHandleSource | FileUrlSource | DirectorySource | null, id: string) {
-  return gen === sourceGenRef.current && active === activeRef.current && id === sourceIdRef.current;
- }
+  useEffect(() => controller.mount(), [controller]);
 
- function applyText(value: string, id: string) {
-  sourceIdRef.current = id;
-  draftRef.current = value;
-  dirtyRef.current = false;
-  setDirty(false);
-  setText(value);
-  setMountText(value);
-  setLoadId(n => n + 1);
-  saverRef.current?.cancel();
-  const storageKey = draftKey(id);
-  saverRef.current = createDraftSaver(browser.storage.local, storageKey, 1000);
-  const gen = sourceGenRef.current;
-  void loadDraft(browser.storage.local, storageKey).then(draft => {
-    if (gen !== sourceGenRef.current || sourceIdRef.current !== id) return;
-    if (dirtyRef.current) return;
-    if (draft === undefined || draft === value) return;
-    draftRef.current = draft;
-    dirtyRef.current = true;
-    setDirty(true);
-    setText(draft);
-    setMountText(draft);
-    setLoadId(n => n + 1);
-  }).catch(() => undefined);
- }
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"]:not([data-slot="toast"], [data-ending-style]), [role="menu"]:not([data-ending-style])'))
+        return;
+      patch({ focusMode: false });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusMode, patch]);
 
- function setActive(active: FileHandleSource | FileUrlSource | null) {
-  watchRef.current?.();
-  watchRef.current = null;
-  activeRef.current = active;
-  setWritable(active instanceof FileHandleSource);
-  setExternalChange(false);
-  setNotice('');
-  if (!active) return;
-  watchRef.current = active.watch({
-    onChange: () => void checkExternal(),
-    onDeleted: () => setNotice('The file was deleted from disk. Your draft is still in the editor.'),
-  });
- }
-
- function setActiveDirectory(dirSource: DirectorySource, filePath: string | null) {
-  watchRef.current?.();
-  watchRef.current = null;
-  activeRef.current = dirSource;
-  setWritable(Boolean(filePath));
-  setExternalChange(false);
-  setNotice('');
-  watchRef.current = dirSource.watch({
-    onTreeChange: () => {
-      const treeGen = ++treeGenRef.current;
-      void dirSource.getTree().then(t => {
-        if (treeGen !== treeGenRef.current || activeRef.current !== dirSource) return;
-        setTreeNodes(t);
-      }).catch(() => undefined);
-    },
-    onChange: () => void checkExternal(),
-    onDeleted: () => setNotice('The folder was deleted or is no longer accessible.'),
-  });
- }
-
- async function checkExternal() {
-  const active = activeRef.current;
-  if (!active) return;
-  const gen = sourceGenRef.current, id = sourceIdRef.current;
-  if (active instanceof FileHandleSource || active instanceof DirectorySource) {
-   const stamp = await active.diskStamp();
-   if (!isCurrent(gen, active, id)) return;
-   if (stamp === stampRef.current) return;
-  }
-  if (dirtyRef.current) { setExternalChange(true); return; }
-  await reloadFromDisk(false);
- }
-
- async function reloadFromDisk(discardDraft: boolean) {
-  const active = activeRef.current;
-  if (!active) return;
-  const id = sourceIdRef.current;
-  const gen = sourceGenRef.current;
-  if (discardDraft) {
-    const discarded = draftRef.current;
-    saverRef.current?.cancel();
-    await browser.storage.local.remove(draftKey(id));
-    if (!isCurrent(gen, active, id)) return;
-    // Edits typed while the draft was being removed are newer than the reload request; keep them.
-    if (draftRef.current !== discarded) { setExternalChange(true); return; }
-    dirtyRef.current = false;
-    setDirty(false);
-  }
-  const value = await active.read();
-  if (gen !== sourceGenRef.current || active !== activeRef.current || id !== sourceIdRef.current) return;
-  if (dirtyRef.current) { setExternalChange(true); return; }
-  if (active instanceof FileHandleSource || active instanceof DirectorySource) {
-    const stamp = await active.diskStamp();
-    if (!isCurrent(gen, active, id)) return;
-    if (dirtyRef.current) { setExternalChange(true); return; }
-    stampRef.current = stamp;
-  }
-  setExternalChange(false);
-  setNotice('');
-  applyText(value, id);
- }
-
- async function save() {
-  const active = activeRef.current;
-  if (!(active instanceof FileHandleSource || active instanceof DirectorySource) || stampRef.current === null) return;
-  const written = draftRef.current;
-  const gen = sourceGenRef.current, id = sourceIdRef.current;
-  try {
-    const stamp = await active.write(written, stampRef.current, docPathRef.current ?? undefined);
-    if (!isCurrent(gen, active, id)) return;
-    stampRef.current = stamp;
-    if (draftRef.current === written) {
-      dirtyRef.current = false;
-      setDirty(false);
-      setConflict(false);
-      setExternalChange(false);
-      setNotice('');
-      saverRef.current?.cancel();
-      await browser.storage.local.remove(draftKey(id));
-      if (!isCurrent(gen, active, id)) return;
+  // Leaving focus mode remounts the toolbar; return keyboard focus to the button that entered it.
+  const wasFocusMode = useRef(false);
+  useEffect(() => {
+    if (wasFocusMode.current && !focusMode) {
+      document.querySelector<HTMLButtonElement>('[data-slot="reader-bar"] [aria-label="Focus mode"]')?.focus();
     }
-  } catch (e) {
-    if (!isCurrent(gen, active, id)) return;
-    if (e instanceof SaveConflictError) setConflict(true);
-    else setError(e instanceof Error ? e.message : 'Unable to save the file');
-  }
- }
+    wasFocusMode.current = focusMode;
+  }, [focusMode]);
 
- async function overwrite() {
-  const active = activeRef.current;
-  if (!(active instanceof FileHandleSource || active instanceof DirectorySource)) return;
-  setConflict(false);
-  const written = draftRef.current;
-  const gen = sourceGenRef.current, id = sourceIdRef.current;
-  try {
-    const stamp = await active.write(written, undefined, docPathRef.current ?? undefined);
-    if (!isCurrent(gen, active, id)) return;
-    stampRef.current = stamp;
-    if (draftRef.current === written) {
-      dirtyRef.current = false;
-      setDirty(false);
-      setExternalChange(false);
-      setNotice('');
-      saverRef.current?.cancel();
-      await browser.storage.local.remove(draftKey(id));
-      if (!isCurrent(gen, active, id)) return;
+  // Picker commands call straight through: no await, animation, or state round-trip before the picker opens.
+  // Built once per controller, so the toolbar, palette, and shortcut binding keep stable props.
+  const commands = useMemo(() => {
+    const { store } = controller;
+    async function exportHtml() {
+      const { mode, docPath, headings } = store.getState();
+      if (mode === 'edit') return;
+      if (viewRef.current) {
+        await viewRef.current.ready();
+      }
+      const container = document.querySelector<HTMLElement>('[data-slot="markdown"]');
+      const contentHtml = container ? container.innerHTML : '';
+      const title = (docPath ? docPath.split('/').pop() : null)?.replace(/\.md$/i, '') || headings[0]?.text || 'document';
+      await downloadHtml(title, contentHtml);
+      notifyToast('Exported HTML');
     }
-  } catch (e) {
-    if (isCurrent(gen, active, id)) setError(e instanceof Error ? e.message : 'Unable to save the file');
-  }
- }
-
- useEffect(() => {
-  const stop = () => { watchRef.current?.(); watchRef.current = null; };
-  window.addEventListener('pagehide', stop);
-  return () => { window.removeEventListener('pagehide', stop); stop(); };
- }, []);
-
- const onEdit = useCallback((value: string) => {
-  draftRef.current = value;
-  viewRef.current?.update(value);
-  if (!dirtyRef.current) { dirtyRef.current = true; setDirty(true); }
-  saverRef.current?.update(value);
- }, []);
-
- const setMode = useCallback((next: Mode) => {
-  if (next !== 'edit') setMountText(draftRef.current);
-  setText(draftRef.current);
-  setModeState(next);
-  const url = new URL(window.location.href);
-  url.searchParams.set('mode', next);
-  window.history.replaceState(null, '', url.toString());
- }, []);
-
- const load = useCallback(async (url: string) => {
-  const gen = ++sourceGenRef.current;
-  const loadId = url;
-  sourceIdRef.current = url;
-  let parsed: URL;
-  try { parsed = new URL(url); } catch {
-    setError('Invalid URL');
-    setText(null);
-    return;
-  }
-  if (!isAllowedUrl(url)) {
-    setError('This URL scheme is not supported');
-    setText(null);
-    return;
-  }
-  watchRef.current?.(); watchRef.current = null;
-  activeRef.current = null; setWritable(false); setExternalChange(false); setNotice('');
-  setDirectorySource(null);
-  setDocPath(null);
-  setHeadings([]);
-  setSource(url);
-  window.history.replaceState(null, '', `?src=${encodeURIComponent(url)}&mode=${mode}`);
-  setLoading(true);
-  setError('');
-  setText(null);
-  try {
-    const key = `markdown-reader:${url}`;
-    const saved = await browser.storage.session.get(key);
-    if (!isCurrent(gen, null, loadId)) return;
-    const entry = saved[key];
-    await browser.storage.session.remove(key);
-    if (!isCurrent(gen, null, loadId)) return;
-    const capturedText = usableCapturedText(entry, url);
-    const fileSource = parsed.protocol === 'file:' ? new FileUrlSource(url) : null;
-    const value = capturedText ?? await (fileSource ?? new UrlSource(url)).read();
-    if (!isCurrent(gen, null, loadId)) return;
-    setLoading(false);
-    applyText(value, url);
-    setActive(fileSource);
-    void addRecentUrl(url).then(() => refreshRecents()).catch(() => undefined);
-  } catch (e) {
-    if (isCurrent(gen, null, loadId)) setError(e instanceof Error ? e.message : 'Unable to fetch Markdown');
-  } finally {
-    if (gen === sourceGenRef.current) setLoading(false);
-  }
- }, [mode, refreshRecents]);
-
- useEffect(() => { if (initial) void load(initial); }, []);
-
- async function openFileHandle(handle: FileSystemFileHandle) {
-  const gen = ++sourceGenRef.current;
-  setLoading(false);
-  const previous = activeRef.current, previousId = sourceIdRef.current;
-  try {
-    const picked = new FileHandleSource(handle);
-    const value = await picked.read();
-    if (!isCurrent(gen, previous, previousId)) return;
-    const stamp = await picked.diskStamp();
-    if (!isCurrent(gen, previous, previousId)) return;
-    watchRef.current?.(); watchRef.current = null;
-    activeRef.current = null; setWritable(false); setExternalChange(false); setNotice('');
-    setDirectorySource(null);
-    setDocPath(null);
-    stampRef.current = stamp;
-    setActive(picked);
-    setSource('');
-    applyText(value, picked.identity);
-    setError('');
-    setHeadings([]);
-    void storeHandle(handle.name, 'file', handle).catch(() => undefined);
-    void refreshRecents();
-  } catch (e) {
-    if (gen === sourceGenRef.current && !(e instanceof DOMException && e.name === 'AbortError')) {
-      setError(e instanceof Error ? e.message : 'Unable to open file');
+    async function print() {
+      if (store.getState().mode === 'edit') return;
+      if (viewRef.current) {
+        await viewRef.current.ready();
+      }
+      printDocument();
     }
-  }
- }
+    return createCommands({
+      openFile: () => void controller.openFile(),
+      openFolder: () => void controller.openFolder(),
+      openUrl: () => store.setState({ urlDialogOpen: true }),
+      save: () => void controller.save(),
+      setMode: controller.setMode,
+      exportHtml: () => void exportHtml(),
+      print: () => void print(),
+      toggleSidebar: () => store.setState((s) => ({ sidebarOpen: !s.sidebarOpen })),
+      toggleFocusMode: () => store.setState((s) => ({ focusMode: !s.focusMode })),
+      openPalette: () => setPaletteOpen(true),
+    });
+  }, [controller]);
+  useEffect(() => bindShortcuts(() => commands, controller.store.getState), [commands, controller]);
+  const run = useCallback<RunCommand>((id) => commands.find((c) => c.id === id)?.run(), [commands]);
+  const onSelectTreeFile = useCallback((path: string) => void controller.selectTreeFile(path), [controller]);
 
- async function openFile() {
-  try {
-    const picked = new FileHandleSource();
-    await picked.pick();
-    const handle = (picked as any).handle as FileSystemFileHandle | undefined;
-    if (handle) {
-      await openFileHandle(handle);
-    }
-  } catch (e) {
-    if (!(e instanceof DOMException && e.name === 'AbortError')) {
-      setError(e instanceof Error ? e.message : 'Unable to open file');
-    }
-  }
- }
+  return (
+    <main
+      className="reader"
+      data-focus={focusMode}
+      data-sidebar={sidebarOpen ? 'open' : 'closed'}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        void controller.drop(e.dataTransfer.items[0]);
+      }}
+    >
+      {!focusMode && <Toolbar commands={commands} onMode={controller.setMode} />}
+      {focusMode && (
+        <Button variant="secondary" size="sm" className="reader-focus-exit" onClick={() => patch({ focusMode: false })}>
+          Exit focus mode
+        </Button>
+      )}
+      <Banners controller={controller} />
+      <ConflictDialog controller={controller} />
+      <UrlDialog controller={controller} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        commands={commands}
+        onSelectTreeFile={onSelectTreeFile}
+        onOpenRecent={controller.handleOpenRecent}
+        onRefreshRecents={controller.refreshRecents}
+        onAnnouncement={controller.notify}
+      />
+      <DropOverlay />
+      <div className="reader-body">
+        <Sidebar controller={controller} />
+        <Content controller={controller} viewRef={viewRef} run={run} />
+      </div>
+    </main>
+  );
+}
 
- function findFirstFile(nodes: TreeNode[]): FileNode | null {
-  for (const node of nodes) {
-    if (node.kind === 'file') return node;
-    if (node.kind === 'directory') {
-      const found = findFirstFile(node.children);
-      if (found) return found;
-    }
-  }
-  return null;
- }
+function Banners({ controller }: { controller: ReaderController }) {
+  const error = useReaderStore((s) => s.error);
+  const externalChange = useReaderStore((s) => s.externalChange);
+  const banners = useMemo(() => selectBanners({ error, externalChange }), [error, externalChange]);
+  return (
+    <StatusBanner
+      banners={banners}
+      onRetry={() => void controller.load(controller.store.getState().source)}
+      onDismissError={controller.dismissError}
+      onReload={() => void controller.reloadFromDisk(true)}
+    />
+  );
+}
 
- async function openFolderHandle(handle: FileSystemDirectoryHandle) {
-  const gen = ++sourceGenRef.current;
-  setLoading(false);
-  const previous = activeRef.current, previousId = sourceIdRef.current;
-  try {
-    void storeHandle(handle.name, 'folder', handle).catch(() => undefined);
-    const dirSource = new DirectorySource(handle);
-    const tree = await dirSource.getTree();
-    if (!isCurrent(gen, previous, previousId)) return;
+function ConflictDialog({ controller }: { controller: ReaderController }) {
+  const conflict = useReaderStore((s) => s.conflict);
+  const patch = controller.store.setState;
+  return (
+    <SaveConflictDialog
+      open={conflict}
+      onOverwrite={() => void controller.overwrite()}
+      onReload={() => {
+        patch({ conflict: false });
+        void controller.reloadFromDisk(true);
+      }}
+      onCancel={() => patch({ conflict: false })}
+    />
+  );
+}
 
-    const first = findFirstFile(tree);
-    watchRef.current?.(); watchRef.current = null;
-    activeRef.current = null; setWritable(false); setExternalChange(false); setNotice('');
+function UrlDialog({ controller }: { controller: ReaderController }) {
+  const open = useReaderStore((s) => s.urlDialogOpen);
+  return (
+    <OpenUrlDialog
+      open={open}
+      onOpenChange={(next) => controller.store.setState({ urlDialogOpen: next })}
+      onOpenUrl={(url) => void controller.load(url)}
+    />
+  );
+}
 
-    setDirectorySource(dirSource);
-    setTreeNodes(tree);
-    setSource('');
-    setError('');
-    setHeadings([]);
+function Sidebar({ controller }: { controller: ReaderController }) {
+  const sidebarOpen = useReaderStore((s) => s.sidebarOpen);
+  const sidebarTab = useReaderStore((s) => s.sidebarTab);
+  return (
+    <aside className="reader-toc" data-slot="reader-toc" inert={!sidebarOpen}>
+      <Tabs value={sidebarTab} onValueChange={(tab) => controller.store.setState({ sidebarTab: tab === 'files' ? 'files' : 'contents' })}>
+        <TabsList variant="line" activateOnFocus>
+          <TabsTrigger value="contents">Contents</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
+        </TabsList>
+        <TabsContent value="contents">
+          <ContentsPanel />
+        </TabsContent>
+        <TabsContent value="files">
+          <FilesPanel controller={controller} />
+        </TabsContent>
+      </Tabs>
+    </aside>
+  );
+}
 
-    if (first) {
-      const textValue = await dirSource.read(first.path);
-      if (gen !== sourceGenRef.current) return;
-      const stamp = await dirSource.diskStamp(first.path);
-      if (gen !== sourceGenRef.current) return;
-      stampRef.current = stamp;
-      setDocPath(first.path);
-      setActiveDirectory(dirSource, first.path);
-      applyText(textValue, dirSource.identity);
-    } else {
-      setDocPath(null);
-      setActiveDirectory(dirSource, null);
-      applyText('', `folder:${handle.name}:empty`);
-    }
-    void refreshRecents();
-  } catch (e) {
-    if (gen === sourceGenRef.current && !(e instanceof DOMException && e.name === 'AbortError')) {
-      setError(e instanceof Error ? e.message : 'Unable to open folder');
-    }
-  }
- }
+function ContentsPanel() {
+  const headings = useReaderStore((s) => s.headings);
+  return <TocPanel headings={headings} />;
+}
 
- async function openFolder() {
-  const picker = (window as unknown as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
-  if (!picker) {
-    setError('Directory picker is not available');
-    return;
-  }
-  try {
-    const handle = await picker();
-    await openFolderHandle(handle);
-  } catch (e) {
-    if (!(e instanceof DOMException && e.name === 'AbortError')) {
-      setError(e instanceof Error ? e.message : 'Unable to open folder');
-    }
-  }
- }
+function FilesPanel({ controller }: { controller: ReaderController }) {
+  const { text, directorySource, docPath, treeNodes, recents } = useReaderStore(
+    useShallow((s) => ({
+      text: s.text,
+      directorySource: s.directorySource,
+      docPath: s.docPath,
+      treeNodes: s.treeNodes,
+      recents: s.recents,
+    })),
+  );
+  return (
+    <>
+      {directorySource ? (
+        <div className="reader-files-panel">
+          <div className="reader-folder-actions">
+            <Button variant="secondary" onClick={() => void controller.openFolder()}>
+              Open folder
+            </Button>
+          </div>
+          <FileTree nodes={treeNodes} activePath={docPath} onSelectFile={(p) => void controller.selectTreeFile(p)} />
+        </div>
+      ) : (
+        <div className="reader-files-empty">
+          <p className="text-sm">No folder opened.</p>
+          <Button variant="secondary" onClick={() => void controller.openFolder()}>
+            Open folder
+          </Button>
+        </div>
+      )}
+      {text !== null && (
+        <RecentSection
+          items={recents}
+          onOpenItem={controller.handleOpenRecent}
+          onRefresh={controller.refreshRecents}
+          onAnnouncement={controller.notify}
+        />
+      )}
+    </>
+  );
+}
 
- async function selectTreeFile(filePath: string) {
-  if (!directorySource) return;
-  const gen = ++sourceGenRef.current;
-  const previous = activeRef.current, previousId = sourceIdRef.current;
-  try {
-    const textValue = await directorySource.read(filePath);
-    if (!isCurrent(gen, previous, previousId)) return;
-    const stamp = await directorySource.diskStamp(filePath);
-    if (!isCurrent(gen, previous, previousId)) return;
-    stampRef.current = stamp;
-    setDocPath(filePath);
-    setActiveDirectory(directorySource, filePath);
-    applyText(textValue, directorySource.identity);
-    setHeadings([]);
-    setError('');
-  } catch (e) {
-    if (isCurrent(gen, previous, previousId)) {
-      setError(e instanceof Error ? e.message : 'Unable to open file');
-    }
-  }
- }
-
- async function handleOpenRecent(item: RecentItem) {
-  if (item.kind === 'handle') {
-    if (item.entry.type === 'folder') {
-      await openFolderHandle(item.entry.handle as FileSystemDirectoryHandle);
-    } else {
-      await openFileHandle(item.entry.handle as FileSystemFileHandle);
-    }
-  } else {
-    await load(item.url);
-  }
- }
-
- async function drop(event: React.DragEvent) {
-  event.preventDefault();
-  const item = event.dataTransfer.items[0];
-  if (!item) return;
-  const gen = ++sourceGenRef.current;
-  setLoading(false);
-  const previous = activeRef.current, previousId = sourceIdRef.current;
-  try {
-    const file = await FileHandleSource.fromDrop(item);
-    if (!isCurrent(gen, previous, previousId)) return;
-    if (file) {
-      if (!isValidMarkdownFile(file.name)) {
-        setError('Only Markdown files (.md, .markdown) are supported');
+/**
+ * Whether the document is shown. The welcome screen hands over to the document through a View Transition when the API
+ * exists and motion is allowed; otherwise the update is immediate. Pickers never wait on this: it only delays a paint.
+ */
+function useDocumentReveal(store: ReaderStore): boolean {
+  const [shown, setShown] = useState(() => store.getState().text !== null);
+  useEffect(() => {
+    let current = store.getState().text !== null;
+    setShown(current);
+    return store.subscribe((state) => {
+      // While a load is in flight the spinner covers the content, so a shown document stays shown until the load ends.
+      const next = state.text !== null || (state.loading && current);
+      if (next === current) return;
+      current = next;
+      const start = document.startViewTransition?.bind(document);
+      if (!next || !start || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        setShown(next);
         return;
       }
-      const value = await file.text();
-      if (!isCurrent(gen, previous, previousId)) return;
-      watchRef.current?.(); watchRef.current = null;
-      activeRef.current = null; setWritable(false); setExternalChange(false); setNotice('');
-      setActive(null);
-      setDirectorySource(null);
-      setDocPath(null);
-      setHeadings([]);
-      const identity = dropFileIdentity(file);
-      applyText(value, identity);
-      setSource('');
-      setError('');
-    }
-  } catch (e) {
-    if (isCurrent(gen, previous, previousId)) setError(e instanceof Error ? e.message : 'Unable to open file');
-  }
- }
+      // Reads `current` when the callback runs, so a quick close and reopen cannot apply a stale value.
+      const transition = start(() => flushSync(() => setShown(current)));
+      for (const settled of [transition.ready, transition.finished]) settled.catch(() => undefined);
+    });
+  }, [store]);
+  return shown;
+}
 
-  async function handleExportHtml() {
-    if (mode === 'edit') return;
-    if (viewRef.current) {
-      await viewRef.current.ready();
+function Content({
+  controller,
+  viewRef,
+  run,
+}: {
+  controller: ReaderController;
+  viewRef: React.RefObject<MarkdownViewHandle | null>;
+  run: RunCommand;
+}) {
+  const { mode, mountText, loadId, source, loading, directorySource, docPath } = useReaderStore(
+    useShallow((s) => ({
+      mode: s.mode,
+      mountText: s.mountText,
+      loadId: s.loadId,
+      source: s.source,
+      loading: s.loading,
+      directorySource: s.directorySource,
+      docPath: s.docPath,
+    })),
+  );
+  const hasText = useDocumentReveal(controller.store);
+  const setHeadings = useCallback((headings: Heading[]) => controller.store.setState({ headings }), [controller]);
+  const onEdit = useCallback(
+    (value: string) => {
+      controller.edit(value);
+      viewRef.current?.update(value);
+    },
+    [controller, viewRef],
+  );
+
+  function onContentClick(e: React.MouseEvent) {
+    const link = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[data-md-link], a[href^="#"]');
+    if (!link) return;
+    e.preventDefault();
+    if (link.hasAttribute('data-md-link')) {
+      const folderPath = link.getAttribute('data-folder-path');
+      if (folderPath && directorySource) {
+        void controller.selectTreeFile(folderPath);
+        return;
+      }
+      if (link.href) {
+        void controller.load(link.href);
+        return;
+      }
     }
-    const container = document.querySelector<HTMLElement>('.tds-custom-markdown');
-    const contentHtml = container ? container.innerHTML : '';
-    const title = (docPath ? docPath.split('/').pop() : null)?.replace(/\.md$/i, '') || headings[0]?.text || 'document';
-    await downloadHtml(title, contentHtml);
+    const id = decodeURIComponent(link.getAttribute('href')?.slice(1) ?? '');
+    if (id) document.getElementById(id)?.scrollIntoView({ behavior: scrollBehavior() });
   }
 
-  async function handlePrint() {
-    if (mode === 'edit') return;
-    if (viewRef.current) {
-      await viewRef.current.ready();
-    }
-    printDocument();
-  }
+  return (
+    // Delegated handler for Markdown links, which are natively keyboard-operable; the section itself is not interactive.
+    // biome-ignore lint/a11y/noStaticElementInteractions: event delegation for links inside rendered Markdown
+    // biome-ignore lint/a11y/useKeyWithClickEvents: links handle their own keyboard activation, which bubbles as click
+    <section data-slot="reader-content" className="reader-content" onClick={onContentClick}>
+      {loading ? (
+        <Spinner aria-label="Loading Markdown" />
+      ) : hasText ? (
+        <div className={`reader-panes reader-panes--${mode}`}>
+          {mode !== 'read' && <EditorPane key={loadId} initialText={controller.getDraft()} onChange={onEdit} />}
+          {mode !== 'edit' && (
+            <MarkdownView
+              ref={viewRef}
+              text={mountText}
+              baseUrl={source}
+              onHeadings={setHeadings}
+              directorySource={directorySource}
+              docPath={docPath}
+            />
+          )}
+        </div>
+      ) : (
+        <ConnectedWelcome controller={controller} run={run} />
+      )}
+    </section>
+  );
+}
 
- return <main className="tds-custom-reader" onDragOver={e => e.preventDefault()} onDrop={e => void drop(e)}><TopBar source={source} onNavigate={url => void load(url)} onOpenFile={() => void openFile()} onExportHtml={() => void handleExportHtml()} onPrint={() => void handlePrint()} exportDisabled={mode === 'edit'} /><div className="tds-custom-reader__toolbar">{text !== null && <ToggleGroup type="single" className="tds-segmented-control" aria-label="Reader mode" value={mode} onValueChange={v => { if (v) setMode(v as Mode); }}>{MODES.map(m => <ToggleGroupItem key={m} value={m} className={`tds-segmented-control__item${m === mode ? ' tds-segmented-control__item--selected' : ''}`}>{m.charAt(0).toUpperCase() + m.slice(1)}</ToggleGroupItem>)}</ToggleGroup>}{writable && text !== null && <Button variant="secondary" disabled={!dirty} onClick={() => void save()}>Save</Button>}{dirty && <div className="tds-announcement" role="status"><span>Unsaved draft</span></div>}{externalChange && <div className="tds-announcement" role="status"><span>File changed on disk: </span><Button variant="secondary" onClick={() => void reloadFromDisk(true)}>Reload</Button></div>}{notice && <div className="tds-announcement" role="status"><span>{notice}</span></div>}</div><SaveConflictDialog open={conflict} onOverwrite={() => void overwrite()} onReload={() => { setConflict(false); void reloadFromDisk(true); }} onCancel={() => setConflict(false)} />{error && <Announce message={error} onRetry={() => void load(source)} />}<div className="tds-custom-reader__body"><aside className="tds-custom-reader__toc"><Tabs defaultValue="contents"><TabsList><TabsTrigger value="contents">Contents</TabsTrigger><TabsTrigger value="files">Files</TabsTrigger></TabsList><TabsContent value="contents"><TocPanel headings={headings} /></TabsContent><TabsContent value="files">{directorySource ? <div className="tds-custom-reader__files-panel"><div className="tds-custom-reader__folder-actions"><Button variant="secondary" onClick={() => void openFolder()}>Open folder</Button></div><FileTree nodes={treeNodes} activePath={docPath} onSelectFile={p => void selectTreeFile(p)} /></div> : <div className="tds-custom-reader__files-empty"><p className="text-body-sm">No folder opened.</p><Button variant="secondary" onClick={() => void openFolder()}>Open folder</Button></div>}<RecentSection items={recents} onOpenItem={handleOpenRecent} onRefresh={refreshRecents} onAnnouncement={setNotice} /></TabsContent></Tabs></aside><section className="tds-custom-reader__content" onClick={e => { const link = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[data-md-link], a[href^="#"]'); if (!link) return; e.preventDefault(); if (link.hasAttribute('data-md-link')) { const folderPath = link.getAttribute('data-folder-path'); if (folderPath && directorySource) { void selectTreeFile(folderPath); return; } if (link.href) { void load(link.href); return; } } const id = decodeURIComponent(link.getAttribute('href')!.slice(1)); if (id) document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }); }}>{loading ? <div className="tds-spinner tds-spinner--md" role="status" aria-label="Loading Markdown" /> : text !== null ? <div className={`tds-custom-reader__panes tds-custom-reader__panes--${mode}`}>{mode !== 'read' && <EditorPane key={loadId} initialText={draftRef.current} onChange={onEdit} />}{mode !== 'edit' && <MarkdownView ref={viewRef} text={mountText} baseUrl={source} onHeadings={setHeadings} directorySource={directorySource} docPath={docPath} />}</div> : null}</section></div></main>;
+function ConnectedWelcome({ controller, run }: { controller: ReaderController; run: RunCommand }) {
+  const recents = useReaderStore((s) => s.recents);
+  return (
+    <Welcome
+      recents={recents}
+      onOpenFile={() => run('open-file')}
+      onOpenFolder={() => run('open-folder')}
+      onOpenUrl={() => run('open-url')}
+      onOpenRecent={controller.handleOpenRecent}
+      onRefreshRecents={controller.refreshRecents}
+      onAnnouncement={controller.notify}
+    />
+  );
 }

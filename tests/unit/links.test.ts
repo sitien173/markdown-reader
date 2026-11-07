@@ -4,7 +4,10 @@ import { render } from '../../src/render/pipeline';
 
 describe('link rewriting', () => {
   it('resolves relative href/src, retains fragments, marks markdown links, and secures external links', () => {
-    const html = render('[next](next.md) [part](#part) [out](https://other.test/x) [absolute](https://example.test/a.markdown)\n\n<img src="../img.png"><a target="_blank" rel="opener" href="https://example.test/same">same</a><a href="//cdn.example.test/x">scheme</a>', 'https://example.test/docs/readme.md').html;
+    const html = render(
+      '[next](next.md) [part](#part) [out](https://other.test/x) [absolute](https://example.test/a.markdown)\n\n<img src="../img.png"><a target="_blank" rel="opener" href="https://example.test/same">same</a><a href="//cdn.example.test/x">scheme</a>',
+      'https://example.test/docs/readme.md',
+    ).html;
     const doc = new DOMParser().parseFromString(html, 'text/html');
     expect(doc.querySelector('a')?.getAttribute('href')).toBe('https://example.test/docs/next.md');
     expect(doc.querySelector('a')?.getAttribute('data-md-link')).toBe('');
@@ -17,7 +20,10 @@ describe('link rewriting', () => {
     expect(doc.querySelector('img')?.getAttribute('src')).toBe('https://example.test/img.png');
   });
   it('marks markdown absolute paths and secures all http links with file or empty bases', () => {
-    const html = render('<a href="https://example.test/a.markdown">md</a><a href="https://example.test/">web</a><a href="//cdn.example.test/x">scheme</a>', 'file:///tmp/read.md').html;
+    const html = render(
+      '<a href="https://example.test/a.markdown">md</a><a href="https://example.test/">web</a><a href="//cdn.example.test/x">scheme</a>',
+      'file:///tmp/read.md',
+    ).html;
     const doc = new DOMParser().parseFromString(html, 'text/html');
     expect(doc.querySelector('a[href$="a.markdown"]')?.hasAttribute('data-md-link')).toBe(true);
     expect(doc.querySelector('a[href="https://example.test/"]')?.getAttribute('target')).toBe('_blank');
@@ -26,9 +32,9 @@ describe('link rewriting', () => {
   it('resolves folder-relative links and renders unresolvable outside links as disabled', async () => {
     const doc = new DOMParser().parseFromString(
       '<a href="sub/target.md">inner</a><a href="../outside.md">outside</a><a href="https://example.com/ext.md">external</a>',
-      'text/html'
+      'text/html',
     );
-    const { resolveFolderLinks } = await import('../../src/render/links') as any;
+    const { resolveFolderLinks } = (await import('../../src/render/links')) as any;
 
     const inner = doc.querySelector('a[href="sub/target.md"]')!;
     resolveFolderLinks(inner, 'docs/readme.md');
@@ -46,7 +52,9 @@ describe('link rewriting', () => {
     let revoked = '';
     const fakeUrl = 'blob:test-image-123';
     const originalRevoke = URL.revokeObjectURL;
-    URL.revokeObjectURL = vi.fn((u) => { revoked = u; });
+    URL.revokeObjectURL = vi.fn((u) => {
+      revoked = u;
+    });
 
     const controller = new AbortController();
     const fakeSource = {
@@ -59,7 +67,7 @@ describe('link rewriting', () => {
 
     const doc = new DOMParser().parseFromString('<img src="photo.png">', 'text/html');
 
-    const { resolveFolderImages } = await import('../../src/render/links') as any;
+    const { resolveFolderImages } = (await import('../../src/render/links')) as any;
     await resolveFolderImages(doc.body, fakeSource, 'readme.md', undefined, controller.signal);
 
     const img = doc.querySelector('img')!;
@@ -80,7 +88,7 @@ describe('link rewriting', () => {
     const doc = new DOMParser().parseFromString('<img src="photo.png">', 'text/html');
     const created: string[] = [];
 
-    const { resolveFolderImages } = await import('../../src/render/links') as any;
+    const { resolveFolderImages } = (await import('../../src/render/links')) as any;
     await resolveFolderImages(doc.body, fakeSource, 'readme.md', undefined, undefined, (u: string) => {
       created.push(u);
     });

@@ -7,11 +7,11 @@ export function EditorPane({ initialText, onChange }: { initialText: string; onC
   const host = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // initialText is applied on mount; the parent remounts this pane with a key when the source changes.
+  const initialRef = useRef(initialText);
   useEffect(() => {
-    const view: EditorView = createEditor(host.current!, initialText, (text) => onChangeRef.current(text));
+    const view: EditorView = createEditor(host.current!, initialRef.current, (text) => onChangeRef.current(text));
     return () => view.destroy();
-    // initialText is applied on mount; the parent remounts this pane with a key when the source changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <div ref={host} className="tds-custom-editor" />;
+  return <div ref={host} className="editor-host" />;
 }

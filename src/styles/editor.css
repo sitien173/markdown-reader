@@ -1,9 +1,62 @@
-.tds-custom-reader__panes { display: grid; gap: var(--gap-lg); min-width: 0; }
-.tds-custom-reader__panes--split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-.tds-custom-editor { min-width: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-neutral-01); overflow: hidden; }
-.tds-custom-editor .cm-editor { font-family: var(--font-family-mono, monospace); font-size: 0.875rem; color: var(--text-default); background: var(--surface-neutral-01); }
-.tds-custom-editor .cm-editor.cm-focused { outline: 2px solid var(--border-focus); outline-offset: -2px; }
-.tds-custom-editor .cm-gutters { background: var(--surface-neutral-02); color: var(--text-caption); border-inline-end: 1px solid var(--border-subtle); }
-.tds-custom-editor .cm-activeLine, .tds-custom-editor .cm-activeLineGutter { background: var(--surface-hover); }
-.tds-custom-editor .cm-selectionBackground, .tds-custom-editor.cm-focused .cm-selectionBackground { background: var(--surface-selected) !important; }
-.tds-custom-editor .cm-cursor { border-left-color: var(--text-default); }
+.reader-panes {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.reader-panes--split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+.editor-host {
+  --cm-accent: #0066cc;
+  --cm-subtle: #636366;
+  --cm-code: #a3290c;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  overflow: hidden;
+}
+.editor-host .cm-editor {
+  font-family: var(--font-code);
+  font-size: 0.875rem;
+  color: var(--foreground);
+  background: var(--background);
+}
+.editor-host .cm-editor.cm-focused {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.editor-host .cm-gutters {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  border-inline-end: 1px solid var(--border);
+}
+.editor-host .cm-activeLine,
+.editor-host .cm-activeLineGutter {
+  background: var(--accent);
+}
+.editor-host .cm-activeLineGutter {
+  color: var(--foreground);
+}
+.editor-host .cm-selectionBackground,
+.editor-host.cm-focused .cm-selectionBackground {
+  background: var(--alert-note-bg) !important;
+}
+.editor-host .cm-cursor {
+  border-left-color: var(--foreground);
+}
+@media (prefers-color-scheme: dark) {
+  .editor-host {
+    --cm-accent: #6cb4ff;
+    --cm-subtle: #aeaeb2;
+    --cm-code: #ff9e80;
+  }
+}
+@media print {
+  .editor-host {
+    --cm-accent: #0066cc;
+    --cm-subtle: #636366;
+    --cm-code: #a3290c;
+  }
+}

@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import type { TreeNode } from '../source/directory';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../components/ui/collapsible';
 
@@ -9,36 +10,24 @@ export interface FileTreeProps {
 
 export function FileTree({ nodes, activePath, onSelectFile }: FileTreeProps) {
   if (nodes.length === 0) {
-    return <div className="text-body-sm">No Markdown files found.</div>;
+    return <div className="text-sm">No Markdown files found.</div>;
   }
 
   return (
-    <ul className="tds-nav-list" role="tree">
-      {nodes.map(node => {
+    <ul className="nav-list" data-slot="file-tree">
+      {nodes.map((node) => {
         if (node.kind === 'directory') {
           return (
-            <li key={node.path} role="treeitem">
+            <li key={node.path}>
               <Collapsible defaultOpen>
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className="tds-side-nav__nav-item"
-                    aria-label={`Toggle ${node.name}`}
-                  >
-                    <span className="tds-caret" aria-hidden="true">
-                      <svg viewBox="0 0 8 11" fill="currentColor">
-                        <path d="M1.5 1.5L6.5 5.5L1.5 9.5" />
-                      </svg>
-                    </span>
-                    <span>{node.name}</span>
-                  </button>
+                <CollapsibleTrigger
+                  render={<button type="button" className="nav-item" data-slot="file-tree-toggle" aria-label={`Toggle ${node.name}`} />}
+                >
+                  <ChevronRight className="nav-caret" aria-hidden="true" />
+                  <span>{node.name}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <FileTree
-                    nodes={node.children}
-                    activePath={activePath}
-                    onSelectFile={onSelectFile}
-                  />
+                  <FileTree nodes={node.children} activePath={activePath} onSelectFile={onSelectFile} />
                 </CollapsibleContent>
               </Collapsible>
             </li>
@@ -47,10 +36,11 @@ export function FileTree({ nodes, activePath, onSelectFile }: FileTreeProps) {
 
         const isActive = activePath === node.path;
         return (
-          <li key={node.path} role="treeitem">
+          <li key={node.path}>
             <button
               type="button"
-              className={`tds-side-nav__nav-item${isActive ? ' tds-side-nav__nav-item--active' : ''}`}
+              data-slot="file-tree-file"
+              className={`nav-item${isActive ? ' nav-item--active' : ''}`}
               aria-current={isActive ? 'page' : undefined}
               onClick={() => onSelectFile(node.path, node.handle)}
             >

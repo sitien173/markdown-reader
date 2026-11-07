@@ -18,10 +18,7 @@ export const test = base.extend<Fixtures>({
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: 'chromium',
       headless: true,
-      args: [
-        `--disable-extensions-except=${extensionPath}`,
-        `--load-extension=${extensionPath}`,
-      ],
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     await use(context);
     await context.close();
@@ -38,11 +35,13 @@ export const test = base.extend<Fixtures>({
   },
 });
 
-export async function startFixtureServer(handler: RequestListener): Promise<{ server: Server; origin: string; close: () => Promise<void> }> {
+export async function startFixtureServer(
+  handler: RequestListener,
+): Promise<{ server: Server; origin: string; close: () => Promise<void> }> {
   const server = createServer(handler);
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { server, origin, close: () => new Promise<void>(resolve => server.close(() => resolve())) };
+  return { server, origin, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
 }
 
 export { expect } from '@playwright/test';

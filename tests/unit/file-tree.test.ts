@@ -42,7 +42,7 @@ describe('FileTree', () => {
     },
   ];
 
-  it('renders tree items with tds-nav-list, tds-side-nav__nav-item, and tds-caret', () => {
+  it('renders tree items with the file-tree list, toggles, and the active file', () => {
     const onSelectFile = vi.fn();
     const container = document.createElement('div');
     document.body.append(container);
@@ -52,16 +52,16 @@ describe('FileTree', () => {
       root.render(React.createElement(FileTree, { nodes, activePath: 'readme.md', onSelectFile }));
     });
 
-    const list = container.querySelector('.tds-nav-list');
+    const list = container.querySelector('[data-slot="file-tree"]');
     expect(list).not.toBeNull();
 
-    const items = container.querySelectorAll('.tds-side-nav__nav-item');
+    const items = container.querySelectorAll('[data-slot="file-tree-toggle"], [data-slot="file-tree-file"]');
     expect(items.length).toBeGreaterThanOrEqual(3);
 
-    const caret = container.querySelector('.tds-caret');
-    expect(caret).not.toBeNull();
+    const toggle = container.querySelector('[data-slot="file-tree-toggle"]');
+    expect(toggle?.getAttribute('aria-label')).toBe('Toggle docs');
 
-    const activeItem = container.querySelector('.tds-side-nav__nav-item--active');
+    const activeItem = container.querySelector('[aria-current="page"]');
     expect(activeItem).not.toBeNull();
     expect(activeItem?.textContent).toContain('readme.md');
     expect(activeItem?.getAttribute('aria-current')).toBe('page');
@@ -81,7 +81,7 @@ describe('FileTree', () => {
     });
 
     const buttons = [...container.querySelectorAll('button')];
-    const readmeBtn = buttons.find(b => b.textContent?.includes('readme.md'));
+    const readmeBtn = buttons.find((b) => b.textContent?.includes('readme.md'));
     expect(readmeBtn).toBeTruthy();
 
     act(() => {

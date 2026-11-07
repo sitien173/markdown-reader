@@ -10,9 +10,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "src/**/*",
-    "tests/**/*",
-    ".wxt/types/**/*"
-  ]
+  "include": ["src/**/*", "tests/**/*", ".wxt/types/**/*"]
 }

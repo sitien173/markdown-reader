@@ -12,7 +12,9 @@ describe('sanitize', () => {
     const observed: string[] = [];
     const purify = createDOMPurify(window);
     purify.addHook('uponSanitizeElement', (node) => observed.push(node.nodeName.toLowerCase()));
-    const clean = purify.sanitize('<div><p>text<custom-x>unknown</custom-x><style>body{color:red}</style></p></div>', { ALLOWED_TAGS: ['div', 'p'] });
+    const clean = purify.sanitize('<div><p>text<custom-x>unknown</custom-x><style>body{color:red}</style></p></div>', {
+      ALLOWED_TAGS: ['div', 'p'],
+    });
     expect(clean).toBe('<div><p>textunknown</p></div>');
     expect(observed).toContain('custom-x');
     expect(observed).toContain('style');
@@ -20,12 +22,21 @@ describe('sanitize', () => {
   });
 
   it('preserves supported semantic and KaTeX markup', () => {
-    const html = sanitize('<details><summary>More</summary><kbd>Esc</kbd></details><span class="katex-html" style="color:red" aria-hidden="true"><math><semantics><mrow><mi>x</mi><mo>=</mo><mn>1</mn><annotation encoding="application/x-tex">x=1</annotation></semantics></math></span><input type="checkbox" disabled checked><a id="fn1" href="#fnref1" data-md-link="">note</a>');
-    expect(html).toContain('<details>'); expect(html).toContain('<summary>'); expect(html).toContain('<kbd>');
-    expect(html).toContain('<math>'); expect(html).toContain('<annotation encoding="application/x-tex">');
-    expect(html).toContain('class="katex-html"'); expect(html).toContain('aria-hidden="true"');
-    expect(html).toContain('type="checkbox"'); expect(html).toContain('disabled=""'); expect(html).toContain('checked=""');
-    expect(html).toContain('data-md-link=""'); expect(html).toContain('id="user-content-fn1"');
+    const html = sanitize(
+      '<details><summary>More</summary><kbd>Esc</kbd></details><span class="katex-html" style="color:red" aria-hidden="true"><math><semantics><mrow><mi>x</mi><mo>=</mo><mn>1</mn><annotation encoding="application/x-tex">x=1</annotation></semantics></math></span><input type="checkbox" disabled checked><a id="fn1" href="#fnref1" data-md-link="">note</a>',
+    );
+    expect(html).toContain('<details>');
+    expect(html).toContain('<summary>');
+    expect(html).toContain('<kbd>');
+    expect(html).toContain('<math>');
+    expect(html).toContain('<annotation encoding="application/x-tex">');
+    expect(html).toContain('class="katex-html"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('disabled=""');
+    expect(html).toContain('checked=""');
+    expect(html).toContain('data-md-link=""');
+    expect(html).toContain('id="user-content-fn1"');
     expect(html).toContain('href="#user-content-fnref1"');
   });
 
@@ -65,21 +76,32 @@ describe('sanitize', () => {
   });
 
   it('rejects CSS comment, escape, and entity bypasses', () => {
-    for (const style of ['back/**/ground:u\\rl(https://evil.test/a)', 'background:u\\72l(https://evil.test/a)', 'width:expr/**/ession(alert(1))', 'background:&#x75;rl(https://evil.test/a)', 'position:absolute;bottom:0', 'background-color:var(--x)']) {
+    for (const style of [
+      'back/**/ground:u\\rl(https://evil.test/a)',
+      'background:u\\72l(https://evil.test/a)',
+      'width:expr/**/ession(alert(1))',
+      'background:&#x75;rl(https://evil.test/a)',
+      'position:absolute;bottom:0',
+      'background-color:var(--x)',
+    ]) {
       const html = sanitize(`<span style="${style}">x</span>`);
       expect(html).not.toMatch(/url\(|expression|position|var\(/i);
     }
   });
 
   it('filters style declarations and removes non-checkbox inputs', () => {
-    const html = sanitize('<div style="background:url(https://evil.test/p.gif)">urlcase</div><div style="position:fixed;top:0;left:0;width:100vw;height:100vh">positioncase</div><input type="image" src="https://evil.test/a.png">');
+    const html = sanitize(
+      '<div style="background:url(https://evil.test/p.gif)">urlcase</div><div style="position:fixed;top:0;left:0;width:100vw;height:100vh">positioncase</div><input type="image" src="https://evil.test/a.png">',
+    );
     expect(html).not.toMatch(/url\(/i);
     expect(html).not.toMatch(/position\s*:/i);
     expect(html).not.toContain('<input');
   });
 
   it('keeps raster data images but rejects data documents and SVG images', () => {
-    const html = sanitize('<img src="data:image/png;base64,iVBORw0KGgo="><a href="data:text/html,hello">html</a><img src="data:image/svg+xml,%3Csvg%3E">');
+    const html = sanitize(
+      '<img src="data:image/png;base64,iVBORw0KGgo="><a href="data:text/html,hello">html</a><img src="data:image/svg+xml,%3Csvg%3E">',
+    );
     const doc = new DOMParser().parseFromString(html, 'text/html');
     expect(doc.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo=');
     expect(doc.querySelector('a')?.hasAttribute('href')).toBe(false);
@@ -119,23 +141,14 @@ describe('sanitize', () => {
   });
 
   it('scheme matrix follows DOMPurify default', () => {
-    const allowed = [
-      'https://example.com/page',
-      'http://example.com/page',
-      'mailto:user@example.com',
-      'tel:+1234567890',
-    ];
+    const allowed = ['https://example.com/page', 'http://example.com/page', 'mailto:user@example.com', 'tel:+1234567890'];
     for (const url of allowed) {
       const html = sanitize(`<a href="${url}">link</a>`);
       const doc = new DOMParser().parseFromString(html, 'text/html');
       expect(doc.querySelector('a')?.getAttribute('href')).toBe(url);
     }
 
-    const disallowed = [
-      'blob:https://example.com/uuid',
-      'javascript:alert(1)',
-      'vbscript:alert(1)',
-    ];
+    const disallowed = ['blob:https://example.com/uuid', 'javascript:alert(1)', 'vbscript:alert(1)'];
     for (const url of disallowed) {
       const html = sanitize(`<a href="${url}">link</a><img src="${url}">`);
       expect(html).not.toContain(url);

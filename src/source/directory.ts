@@ -30,9 +30,9 @@ export function resolveRelativePath(baseDocPath: string, relativePath: string): 
   }
 
   const isFromRoot = clean.startsWith('/');
-  const baseDir = isFromRoot ? [] : (baseDocPath.includes('/') ? baseDocPath.split('/').slice(0, -1) : []);
+  const baseDir = isFromRoot ? [] : baseDocPath.includes('/') ? baseDocPath.split('/').slice(0, -1) : [];
   const segments = [...baseDir];
-  const parts = clean.split('/').filter(p => p !== '' && p !== '.');
+  const parts = clean.split('/').filter((p) => p !== '' && p !== '.');
 
   let isOutside = false;
   for (const part of parts) {
@@ -53,10 +53,7 @@ export function resolveRelativePath(baseDocPath: string, relativePath: string): 
   };
 }
 
-export async function buildTree(
-  dirHandle: FileSystemDirectoryHandle,
-  parentPath = ''
-): Promise<TreeNode[]> {
+export async function buildTree(dirHandle: FileSystemDirectoryHandle, parentPath = ''): Promise<TreeNode[]> {
   const nodes: TreeNode[] = [];
   for await (const entry of (dirHandle as any).values()) {
     const entryPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
@@ -236,7 +233,11 @@ export class DirectorySource implements Source {
     }
   }
 
-  resolveLink(href: string, fromPath?: string, fallbackBaseUrl?: string): {
+  resolveLink(
+    href: string,
+    fromPath?: string,
+    fallbackBaseUrl?: string,
+  ): {
     href: string;
     isMd: boolean;
     target?: string;

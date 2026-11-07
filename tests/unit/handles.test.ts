@@ -23,7 +23,7 @@ describe('persisted handles and reconnect', () => {
 
     const recents = await getRecentHandles();
     expect(recents.length).toBeGreaterThanOrEqual(1);
-    const entry = recents.find(r => r.name === 'my-project');
+    const entry = recents.find((r) => r.name === 'my-project');
     expect(entry).toBeDefined();
     expect(entry!.permission).toBe('prompt');
     expect(entry!.requiresReconnect).toBe(true);
@@ -45,7 +45,7 @@ describe('persisted handles and reconnect', () => {
     await storeHandle('notes.md', 'file', fakeHandle);
 
     const recents = await getRecentHandles();
-    const entry = recents.find(r => r.name === 'notes.md');
+    const entry = recents.find((r) => r.name === 'notes.md');
     expect(entry).toBeDefined();
     expect(entry!.permission).toBe('granted');
     expect(entry!.requiresReconnect).toBe(false);
@@ -98,7 +98,9 @@ describe('persisted handles and reconnect', () => {
     expect(onOpenItem).toHaveBeenCalledWith(items[0]);
     expect(onRefresh).toHaveBeenCalledTimes(1);
 
-    act(() => { root.unmount(); });
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -148,7 +150,9 @@ describe('persisted handles and reconnect', () => {
     expect(onAnnouncement).toHaveBeenCalledTimes(1);
     expect(onAnnouncement).toHaveBeenCalledWith(expect.stringContaining('denied-folder'));
 
-    act(() => { root.unmount(); });
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 });

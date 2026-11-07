@@ -13,14 +13,14 @@ export function RecentSection({ items, onOpenItem, onRefresh, onAnnouncement }: 
   if (items.length === 0) return null;
 
   return (
-    <div className="tds-custom-reader__recents">
-      <div className="tds-custom-reader__recents-title">Recent</div>
-      <ul className="tds-custom-reader__recents-list">
-        {items.map(item => (
-          <li key={item.id} className="tds-custom-reader__recents-item">
+    <div className="reader-recents">
+      <div className="reader-recents-title">Recent</div>
+      <ul className="reader-recents-list">
+        {items.map((item) => (
+          <li key={item.id} className="reader-recents-item">
             {item.kind === 'handle' && item.entry.requiresReconnect ? (
               <>
-                <span className="text-body-sm">{item.title}</span>
+                <span className="text-sm">{item.title}</span>
                 <Button
                   size="sm"
                   variant="secondary"
@@ -42,11 +42,7 @@ export function RecentSection({ items, onOpenItem, onRefresh, onAnnouncement }: 
                 </Button>
               </>
             ) : (
-              <button
-                type="button"
-                className="tds-side-nav__nav-item text-body-sm"
-                onClick={() => void onOpenItem(item)}
-              >
+              <button type="button" className="nav-item" onClick={() => void onOpenItem(item)}>
                 {item.title}
               </button>
             )}

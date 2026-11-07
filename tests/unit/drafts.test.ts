@@ -6,7 +6,9 @@ function fakeStorage() {
   return {
     data,
     get: vi.fn(async (key: string) => ({ [key]: data[key] })),
-    set: vi.fn(async (items: Record<string, unknown>) => { Object.assign(data, items); }),
+    set: vi.fn(async (items: Record<string, unknown>) => {
+      Object.assign(data, items);
+    }),
   };
 }
 

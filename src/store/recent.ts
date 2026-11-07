@@ -1,3 +1,4 @@
+import { parseRecentUrls } from '../lib/schemas';
 import { getRecentHandles, type RecentHandleEntry } from './handles';
 
 export const RECENT_URLS_KEY = 'recentUrls';
@@ -5,14 +6,13 @@ export type RecentStorage = { get(key: string): Promise<Record<string, unknown>>
 
 export async function getRecentUrls(storage: RecentStorage = browser.storage.local): Promise<string[]> {
   const result = await storage.get(RECENT_URLS_KEY);
-  const value = result[RECENT_URLS_KEY];
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  return parseRecentUrls(result[RECENT_URLS_KEY]);
 }
 
 export async function addRecentUrl(url: string, storage: RecentStorage = browser.storage.local): Promise<void> {
   await navigator.locks.request('recent-urls', async () => {
     const previous = await getRecentUrls(storage);
-    await storage.set({ [RECENT_URLS_KEY]: [url, ...previous.filter(item => item !== url)].slice(0, 20) });
+    await storage.set({ [RECENT_URLS_KEY]: [url, ...previous.filter((item) => item !== url)].slice(0, 20) });
   });
 }
 
@@ -30,13 +30,13 @@ export async function getRecentEntries(storage: RecentStorage = browser.storage.
   }
 
   const items: RecentItem[] = [
-    ...handles.map(h => ({
+    ...handles.map((h) => ({
       kind: 'handle' as const,
       id: h.id,
       title: h.name,
       entry: h,
     })),
-    ...urls.map(u => ({
+    ...urls.map((u) => ({
       kind: 'url' as const,
       id: u,
       title: u,

@@ -10,13 +10,20 @@ export function watchPolling({ stamp, onChange, onDeleted, intervalMs }: PollOpt
   const tick = async () => {
     const next = await sample();
     if (stopped) return;
-    if (next === null) { if (last !== null) onDeleted(); }
-    else if (last !== undefined && last !== null && next !== last) onChange();
+    if (next === null) {
+      if (last !== null) onDeleted();
+    } else if (last !== undefined && last !== null && next !== last) onChange();
     last = next;
     if (!stopped) timer = setTimeout(tick, intervalMs);
   };
-  void (async () => { last = await sample(); if (!stopped) timer = setTimeout(tick, intervalMs); })();
-  return () => { stopped = true; clearTimeout(timer); };
+  void (async () => {
+    last = await sample();
+    if (!stopped) timer = setTimeout(tick, intervalMs);
+  })();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
 }
 
 type ObserverRecord = { type: string; relativePathComponents?: string[] };
@@ -47,11 +54,19 @@ export function watchFileHandle(handle: FileSystemFileHandle, events: WatchEvent
       if (records.some((record) => record.type === 'disappeared')) events.onDeleted();
       else if (records.some((record) => record.type === 'modified')) events.onChange();
     });
-    observer.observe(handle).catch(() => { observer?.disconnect(); observer = undefined; poll(); });
+    observer.observe(handle).catch(() => {
+      observer?.disconnect();
+      observer = undefined;
+      poll();
+    });
   } else {
     poll();
   }
-  return () => { stopped = true; observer?.disconnect(); stopPolling?.(); };
+  return () => {
+    stopped = true;
+    observer?.disconnect();
+    stopPolling?.();
+  };
 }
 
 export type DirectoryWatchEvents = {
@@ -89,7 +104,7 @@ export function watchDirectory(
   handle: FileSystemDirectoryHandle,
   activeFilePath: () => string | null,
   events: DirectoryWatchEvents,
-  intervalMs = 1000
+  intervalMs = 1000,
 ): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;

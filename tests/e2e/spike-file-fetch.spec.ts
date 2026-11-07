@@ -26,17 +26,22 @@ async function setFileAccess(page: Page, extensionId: string, enabled: boolean) 
 }
 
 async function extensionIdFor(context: BrowserContext) {
-  const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
   return new URL(worker.url()).host;
 }
 
 async function allowedFileAccess(page: Page) {
-  return page.evaluate(() => new Promise<boolean>((resolve) => {
-    const extensionApi = (window as unknown as Window & {
-      chrome: { extension: { isAllowedFileSchemeAccess(callback: (allowed: boolean) => void): void } };
-    }).chrome.extension;
-    extensionApi.isAllowedFileSchemeAccess(resolve);
-  }));
+  return page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const extensionApi = (
+          window as unknown as Window & {
+            chrome: { extension: { isAllowedFileSchemeAccess(callback: (allowed: boolean) => void): void } };
+          }
+        ).chrome.extension;
+        extensionApi.isAllowedFileSchemeAccess(resolve);
+      }),
+  );
 }
 
 async function assertAccessAndFetch(page: Page, extensionId: string, allowed: boolean) {

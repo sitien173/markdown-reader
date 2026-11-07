@@ -1,17 +1,39 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { buildStandaloneHtml, downloadHtml, printDocument, prepareExportContent } from '../../src/export/export';
+import { buildStandaloneHtml, downloadHtml, printDocument, prepareExportContent, themeExportDiagrams } from '../../src/export/export';
+import { EXPORT_CSS } from '../../src/export/export-styles';
+import { readFileSync } from 'node:fs';
+
+const mermaidMock = vi.hoisted(() => ({ initialize: vi.fn(), render: vi.fn() }));
+vi.mock('mermaid', () => ({ default: mermaidMock }));
+
+// Vitest replaces CSS imports with an empty string, so the Markdown rules are read from disk here.
+const markdownCss = readFileSync('src/styles/markdown.css', 'utf8');
+const globalsCss = readFileSync('src/styles/globals.css', 'utf8');
+
+// Declarations of the first rule whose selector is `:root` inside the given at-rule prelude (or at top level).
+function rootTokens(css: string, atRule?: string): Record<string, string> {
+  let scope = css;
+  if (atRule) {
+    const start = css.indexOf(atRule);
+    if (start < 0) return {};
+    scope = css.slice(start);
+  }
+  const block = /:root\s*\{([^}]*)\}/.exec(scope)?.[1] ?? '';
+  return Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]));
+}
 
 describe('export module', () => {
   it('builds standalone HTML with inlined tokens, markdown styles, and KaTeX CSS without scripts or React', () => {
-    const content = '<h1 id="hello">Hello</h1><p>Test</p><span class="katex">math</span><svg class="mermaid">diagram</svg><pre class="shiki"><code>code</code></pre>';
+    const content =
+      '<h1 id="hello">Hello</h1><p>Test</p><span class="katex">math</span><svg class="mermaid">diagram</svg><pre class="shiki"><code>code</code></pre>';
     const html = buildStandaloneHtml({ title: 'My Doc', contentHtml: content });
 
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('<title>My Doc</title>');
     expect(html).toContain(content);
-    expect(html).toContain('.tds-custom-markdown');
-    expect(html).toContain('--surface-neutral-01');
+    expect(html).toContain('<main class="md-content">');
+    expect(html).toContain('--foreground');
     expect(html).toContain('KaTeX_Main');
     expect(html).toContain('data:font/woff2;base64,');
     expect(html).not.toContain('<script');
@@ -19,11 +41,22 @@ describe('export module', () => {
     expect(html).not.toContain('tailwind');
   });
 
+  it('keeps export CSS offline and defines every token the Markdown rules read', () => {
+    expect(EXPORT_CSS).not.toMatch(/@import/);
+    expect(EXPORT_CSS).not.toMatch(/url\(/);
+    // --shiki-* are set inline by Shiki, not by tokens.
+    const used = new Set([...markdownCss.matchAll(/var\((--(?!shiki)[\w-]+)/g)].map((m) => m[1]));
+    const defined = new Set([...EXPORT_CSS.matchAll(/^\s*(--[\w-]+):/gm)].map((m) => m[1]));
+    expect([...used].filter((name) => !defined.has(name))).toEqual([]);
+  });
+
   it('sanitizes export body with HTML and SVG profiles removing vectors and preserving Mermaid, KaTeX, and Shiki', () => {
-    const malicious = '<script>alert("xss")</script><div onclick="alert(1)">text</div><iframe src="https://evil.test"></iframe><a href="javascript:alert(2)">click</a>';
+    const malicious =
+      '<script>alert("xss")</script><div onclick="alert(1)">text</div><iframe src="https://evil.test"></iframe><a href="javascript:alert(2)">click</a>';
     const mermaid = '<svg viewBox="0 0 100 100"><path d="M0 0 L10 10"></path><text>flow</text></svg>';
     const katex = '<span class="katex"><span class="katex-html"><span class="mord">x</span></span></span>';
-    const shiki = '<pre class="shiki" style="background-color:#24292e;color:#e1e4e8"><code><span style="color:#f97583">const</span> x = 1;</code></pre>';
+    const shiki =
+      '<pre class="shiki" style="background-color:#24292e;color:#e1e4e8"><code><span style="color:#f97583">const</span> x = 1;</code></pre>';
     const body = `${malicious}\n${mermaid}\n${katex}\n${shiki}`;
 
     const html = buildStandaloneHtml({ title: 'Sanitized Export', contentHtml: body });
@@ -40,7 +73,8 @@ describe('export module', () => {
   });
 
   it('replaces remote images with links and inlines blob images as data URLs', async () => {
-    const fakeBlobData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const fakeBlobData =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     const fakeBlobUrl = 'blob:test-image-blob';
 
     // Mock fetch for blob url
@@ -198,5 +232,43 @@ describe('export module', () => {
     window.print = printSpy;
     printDocument();
     expect(printSpy).toHaveBeenCalled();
+  });
+
+  it('embeds dark tokens, forces light under print, and overrides Shiki colors by media query', () => {
+    expect(EXPORT_CSS).toContain('color-scheme: light dark');
+    expect(EXPORT_CSS).toMatch(/@media \(prefers-color-scheme: dark\)/);
+    expect(EXPORT_CSS).toMatch(/@media print/);
+    expect(markdownCss).toMatch(/@media screen and \(prefers-color-scheme: dark\)[^}]*--shiki-dark/);
+    expect(EXPORT_CSS).not.toMatch(/@import|url\(/);
+    expect(rootTokens(EXPORT_CSS, '@media (prefers-color-scheme: dark) {')['--background']).not.toBe(
+      rootTokens(EXPORT_CSS)['--background'],
+    );
+  });
+
+  it('keeps export tokens identical to globals.css for light, dark, and print', () => {
+    for (const scope of [undefined, '@media (prefers-color-scheme: dark) {', '@media print'] as const) {
+      const source = rootTokens(globalsCss, scope);
+      const exported = rootTokens(EXPORT_CSS, scope);
+      expect(Object.keys(exported).length).toBeGreaterThan(5);
+      for (const [name, value] of Object.entries(exported)) expect(source[name], `${scope ?? 'light'} ${name}`).toBe(value);
+    }
+    expect(rootTokens(globalsCss, '@media print')['--background']).toBe(rootTokens(globalsCss)['--background']);
+  });
+
+  it('exports each diagram in a light and a dark copy with disjoint SVG ids', async () => {
+    mermaidMock.render.mockImplementation(async (id: string) => ({
+      svg: `<svg id="${id}"><defs><marker id="${id}_arrow"></marker></defs><title>${mermaidMock.initialize.mock.calls.at(-1)![0].themeVariables.background}</title></svg>`,
+    }));
+    const html = await themeExportDiagrams(
+      '<p>x</p><div data-md-diagram="graph TD; A-->B"><svg id="live"></svg></div><div data-md-diagram="graph TD; C-->D"><svg id="live2"></svg></div>',
+    );
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    expect(doc.querySelectorAll('.md-diagram--light svg')).toHaveLength(2);
+    expect(doc.querySelectorAll('.md-diagram--dark svg')).toHaveLength(2);
+    const ids = [...doc.querySelectorAll('[id]')].map((node) => node.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(doc.querySelector('.md-diagram--light title')?.textContent).not.toBe(doc.querySelector('.md-diagram--dark title')?.textContent);
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('id="live"');
   });
 });

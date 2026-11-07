@@ -1,0 +1,61 @@
+import type { Mode, ReaderState } from '../store/reader-store';
+
+export type CommandId =
+  | 'open-file'
+  | 'open-folder'
+  | 'open-url'
+  | 'save'
+  | 'mode-read'
+  | 'mode-edit'
+  | 'mode-split'
+  | 'export-html'
+  | 'print'
+  | 'toggle-sidebar'
+  | 'focus-mode'
+  | 'command-palette';
+
+/** The state slice command availability reads, so subscribers can select just these fields. */
+export type CommandState = Pick<ReaderState, 'text' | 'writable' | 'mode'>;
+
+export interface Command {
+  id: CommandId;
+  label: string;
+  shortcut?: string;
+  available(state: CommandState): boolean;
+  run(): void;
+}
+
+export interface CommandDeps {
+  openFile(): void;
+  openFolder(): void;
+  openUrl(): void;
+  save(): void;
+  setMode(mode: Mode): void;
+  exportHtml(): void;
+  print(): void;
+  toggleSidebar(): void;
+  toggleFocusMode(): void;
+  openPalette(): void;
+}
+
+const hasDoc = (s: CommandState) => s.text !== null;
+const canExport = (s: CommandState) => hasDoc(s) && s.mode !== 'edit';
+const always = () => true;
+
+/** Single registry for toolbar, palette, and shortcuts. Picker commands call straight through so they stay inside the user gesture. */
+export function createCommands(deps: CommandDeps): Command[] {
+  return [
+    { id: 'open-file', label: 'Open file', shortcut: 'Mod+O', available: always, run: () => deps.openFile() },
+    { id: 'open-folder', label: 'Open folder', available: always, run: () => deps.openFolder() },
+    { id: 'open-url', label: 'Open URL', available: always, run: () => deps.openUrl() },
+    { id: 'save', label: 'Save', shortcut: 'Mod+S', available: (s) => hasDoc(s) && s.writable, run: () => deps.save() },
+    { id: 'mode-read', label: 'Read mode', available: hasDoc, run: () => deps.setMode('read') },
+    { id: 'mode-edit', label: 'Edit mode', available: hasDoc, run: () => deps.setMode('edit') },
+    { id: 'mode-split', label: 'Split mode', available: hasDoc, run: () => deps.setMode('split') },
+    { id: 'export-html', label: 'Export HTML', available: canExport, run: () => deps.exportHtml() },
+    { id: 'print', label: 'Print', shortcut: 'Mod+P', available: canExport, run: () => deps.print() },
+    { id: 'toggle-sidebar', label: 'Toggle sidebar', shortcut: 'Mod+\\', available: always, run: () => deps.toggleSidebar() },
+    { id: 'focus-mode', label: 'Focus mode', available: hasDoc, run: () => deps.toggleFocusMode() },
+    { id: 'command-palette', label: 'Command palette', shortcut: 'Mod+K', available: always, run: () => deps.openPalette() },
+  ];
+}

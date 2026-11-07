@@ -13,7 +13,9 @@ export function createBlockCache<T>(capacity = 200) {
     while (values.size > capacity) values.delete(values.keys().next().value!);
   };
   return {
-    get size() { return values.size; },
+    get size() {
+      return values.size;
+    },
     get(kind: string, language: string, source: string): T | undefined {
       const key = keyOf(kind, language, source);
       const value = values.get(key);

@@ -14,10 +14,22 @@ const SUPERSAMPLE = 4;
 
 // Glyph strokes in unit coordinates.
 const strokes = [
-  [[0.24, 0.3], [0.24, 0.7]],
-  [[0.76, 0.3], [0.76, 0.7]],
-  [[0.24, 0.3], [0.5, 0.6]],
-  [[0.5, 0.6], [0.76, 0.3]],
+  [
+    [0.24, 0.3],
+    [0.24, 0.7],
+  ],
+  [
+    [0.76, 0.3],
+    [0.76, 0.7],
+  ],
+  [
+    [0.24, 0.3],
+    [0.5, 0.6],
+  ],
+  [
+    [0.5, 0.6],
+    [0.76, 0.3],
+  ],
 ];
 const strokeWidth = 0.1;
 const cornerRadius = 0.2;
@@ -54,7 +66,10 @@ function renderIcon(size) {
           const u = (x + (sx + 0.5) / SUPERSAMPLE) / size;
           const v = (y + (sy + 0.5) / SUPERSAMPLE) / size;
           const [r, g, b, a] = pixel(u, v);
-          sum[0] += r * a; sum[1] += g * a; sum[2] += b * a; sum[3] += a;
+          sum[0] += r * a;
+          sum[1] += g * a;
+          sum[2] += b * a;
+          sum[3] += a;
         }
       }
       const alpha = sum[3] / samples;

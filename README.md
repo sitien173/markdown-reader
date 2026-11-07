@@ -2,28 +2,36 @@
 
 A Chrome extension (Manifest V3) that renders Markdown from local files, local folders, and web addresses in one reader page. It works offline and includes a split editor with live preview, export to a standalone HTML file, and print.
 
+## Features
+
+- Open Markdown from a file, a folder, or a web address. Folders show a file tree in the sidebar.
+- Contents panel, split editor with live preview, read, edit, and split modes, and a focus mode.
+- Code highlighting, math, and diagrams. Export to one standalone HTML file, or print.
+- Command palette (Ctrl+K, or Cmd+K on macOS) and shortcuts: open file (`Mod+O`), save (`Mod+S`), print (`Mod+P`), toggle sidebar (`Mod+\`). `Mod` is Ctrl, or Cmd on macOS.
+- Light and dark appearance follow the system setting. Short enter and exit transitions are turned off when the system asks for reduced motion.
+
 ## Requirements
 
-- Node.js with npm (developed on Node.js 24)
+- Node.js (developed on Node.js 24) with pnpm 11 (pinned in `packageManager`)
 - Google Chrome or Chromium
 
 ## Build
 
 ```sh
-npm ci
-npm run typecheck
-npm test
-npm run build
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
-`npm run build` writes the unpacked extension to `.output/chrome-mv3/`. To create a ZIP of that build for the Chrome Web Store, run `npx wxt zip`.
+`pnpm build` writes the unpacked extension to `.output/chrome-mv3/`. To create a ZIP of that build for the Chrome Web Store, run `pnpm exec wxt zip`.
 
 To regenerate the icons in `public/icons/`, run `node scripts/gen-icons.mjs`.
 
 End-to-end tests load the built extension in Chromium and need the build first:
 
 ```sh
-npm run test:e2e
+pnpm test:e2e
 ```
 
 ## Load unpacked

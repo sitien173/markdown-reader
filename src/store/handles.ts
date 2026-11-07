@@ -1,3 +1,4 @@
+import { parseStoredHandle } from '../lib/schemas';
 import { get, set, del, entries, createStore, type UseStore } from 'idb-keyval';
 
 export type StoredHandleType = 'file' | 'folder';
@@ -21,6 +22,11 @@ export interface RecentHandleEntry {
 
 const memStore = new Map<string, StoredHandleRecord>();
 
+function getStore(): UseStore | undefined {
+  customStore ??= getDbStore();
+  return customStore;
+}
+
 function getDbStore(): UseStore | undefined {
   if (typeof indexedDB === 'undefined') return undefined;
   try {
@@ -32,11 +38,7 @@ function getDbStore(): UseStore | undefined {
 
 let customStore: UseStore | undefined;
 
-export async function storeHandle(
-  name: string,
-  type: StoredHandleType,
-  handle: FileSystemHandle
-): Promise<void> {
+export async function storeHandle(name: string, type: StoredHandleType, handle: FileSystemHandle): Promise<void> {
   const id = `${type}:${name}`;
   const record: StoredHandleRecord = {
     id,
@@ -46,7 +48,7 @@ export async function storeHandle(
     lastOpened: Date.now(),
   };
 
-  const store = customStore ?? (customStore = getDbStore());
+  const store = getStore();
   if (store) {
     try {
       await set(id, record, store);
@@ -59,7 +61,7 @@ export async function storeHandle(
 }
 
 export async function removeStoredHandle(id: string): Promise<void> {
-  const store = customStore ?? (customStore = getDbStore());
+  const store = getStore();
   if (store) {
     try {
       await del(id, store);
@@ -72,14 +74,13 @@ export async function removeStoredHandle(id: string): Promise<void> {
 
 export async function getRecentHandles(): Promise<RecentHandleEntry[]> {
   const records: StoredHandleRecord[] = [];
-  const store = customStore ?? (customStore = getDbStore());
+  const store = getStore();
   if (store) {
     try {
-      const all = await entries<string, StoredHandleRecord>(store);
+      const all = await entries<string, unknown>(store);
       for (const [, val] of all) {
-        if (val && typeof val === 'object' && 'handle' in val) {
-          records.push(val);
-        }
+        const record = parseStoredHandle(val);
+        if (record) records.push(record);
       }
     } catch {
       // fallback

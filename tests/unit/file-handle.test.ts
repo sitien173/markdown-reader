@@ -45,7 +45,7 @@ describe('FileHandleSource.write', () => {
     document.body.append(container);
     const root = createRoot(container);
     act(() => root.render(React.createElement(SaveConflictDialog, { open: true, onCancel, onOverwrite, onReload: vi.fn() })));
-    const cancel = [...document.body.querySelectorAll('button')].find(button => button.textContent === 'Cancel');
+    const cancel = [...document.body.querySelectorAll('button')].find((button) => button.textContent === 'Cancel');
     expect(cancel).toBeTruthy();
     act(() => cancel!.click());
     expect(onCancel).toHaveBeenCalledTimes(1);

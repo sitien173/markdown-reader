@@ -27,7 +27,9 @@ describe('context menu link filter', () => {
     expect(isValidCapture({ text: 'body' }, sender, 'extension-id')).toBe(true);
     expect(isValidCapture({ text: 'body' }, { ...sender, id: 'other' }, 'extension-id')).toBe(false);
     expect(isValidCapture({ text: 'body' }, { id: 'extension-id', tab: {} }, 'extension-id')).toBe(false);
-    expect(isValidCapture({ text: 'body' }, { id: 'extension-id', tab: { url: 'https://example.test/page.html' } }, 'extension-id')).toBe(false);
+    expect(isValidCapture({ text: 'body' }, { id: 'extension-id', tab: { url: 'https://example.test/page.html' } }, 'extension-id')).toBe(
+      false,
+    );
     expect(isValidCapture({ text: 'body' }, { id: 'extension-id', tab: { url: 'ftp://example.test/doc.md' } }, 'extension-id')).toBe(false);
   });
 });

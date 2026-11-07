@@ -35,19 +35,27 @@ describe('polling watcher', () => {
 
 describe('handle watcher', () => {
   beforeEach(() => vi.useFakeTimers());
-  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it('disconnects the FileSystemObserver on unsubscribe and reports modifications', async () => {
     const disconnect = vi.fn();
     let deliver: (records: Array<{ type: string }>) => void = () => {};
     class FakeObserver {
-      constructor(callback: (records: Array<{ type: string }>) => void) { deliver = callback; }
+      constructor(callback: (records: Array<{ type: string }>) => void) {
+        deliver = callback;
+      }
       observe = vi.fn(async () => {});
       disconnect = disconnect;
     }
     vi.stubGlobal('FileSystemObserver', FakeObserver);
     const onChange = vi.fn();
-    const stop = watchFileHandle({ getFile: async () => ({ lastModified: 1 }) } as unknown as FileSystemFileHandle, { onChange, onDeleted: vi.fn() });
+    const stop = watchFileHandle({ getFile: async () => ({ lastModified: 1 }) } as unknown as FileSystemFileHandle, {
+      onChange,
+      onDeleted: vi.fn(),
+    });
     deliver([{ type: 'modified' }]);
     expect(onChange).toHaveBeenCalledTimes(1);
     stop();
@@ -58,7 +66,10 @@ describe('handle watcher', () => {
     vi.stubGlobal('FileSystemObserver', undefined);
     let modified = 1000;
     const onChange = vi.fn();
-    const stop = watchFileHandle({ getFile: async () => ({ lastModified: modified }) } as unknown as FileSystemFileHandle, { onChange, onDeleted: vi.fn() });
+    const stop = watchFileHandle({ getFile: async () => ({ lastModified: modified }) } as unknown as FileSystemFileHandle, {
+      onChange,
+      onDeleted: vi.fn(),
+    });
     await vi.advanceTimersByTimeAsync(1000);
     modified = 2000;
     await vi.advanceTimersByTimeAsync(1000);

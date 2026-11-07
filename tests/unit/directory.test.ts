@@ -24,7 +24,9 @@ class FakeFileSystemFileHandle {
   async createWritable(): Promise<FileSystemWritableFileStream> {
     let written = '';
     return {
-      write: async (data: any) => { written = String(data); },
+      write: async (data: any) => {
+        written = String(data);
+      },
       close: async () => {
         this.content = written;
         this.lastModified = Date.now() + 100;
@@ -119,20 +121,20 @@ describe('DirectorySource', () => {
 
       // Root should have 'docs' directory and 'notes.markdown', 'readme.md' files.
       // 'empty-dir' should be completely omitted.
-      expect(tree.map(n => n.name)).toEqual(['docs', 'notes.markdown', 'readme.md']);
+      expect(tree.map((n) => n.name)).toEqual(['docs', 'notes.markdown', 'readme.md']);
       expect(tree[0]?.kind).toBe('directory');
       expect(tree[1]?.kind).toBe('file');
       expect(tree[2]?.kind).toBe('file');
 
       // Check nested children of docs
       const docsNode = tree[0] as { kind: 'directory'; children: TreeNode[] };
-      expect(docsNode.children.map(n => n.name)).toEqual(['advanced', 'guide.md']);
+      expect(docsNode.children.map((n) => n.name)).toEqual(['advanced', 'guide.md']);
       expect(docsNode.children[0]?.kind).toBe('directory');
       expect(docsNode.children[1]?.kind).toBe('file');
 
       // Check nested children of advanced
       const advancedNode = docsNode.children[0] as { kind: 'directory'; children: TreeNode[] };
-      expect(advancedNode.children.map(n => n.name)).toEqual(['internals.markdown']);
+      expect(advancedNode.children.map((n) => n.name)).toEqual(['internals.markdown']);
     });
 
     it('deterministically sorts names that differ only in case using ASCII tie-breaker', async () => {
@@ -141,7 +143,7 @@ describe('DirectorySource', () => {
       root.setFile('README.md', '# UPPER');
       const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
       const tree = await source.getTree();
-      expect(tree.map(n => n.name)).toEqual(['README.md', 'readme.md']);
+      expect(tree.map((n) => n.name)).toEqual(['README.md', 'readme.md']);
     });
   });
 
@@ -183,11 +185,12 @@ describe('DirectorySource', () => {
       const root = new FakeFileSystemDirectoryHandle('root');
       let resolveFirstHandle!: () => void;
       const firstHandlePromise = new Promise<any>((r) => {
-        resolveFirstHandle = () => r({
-          kind: 'file' as const,
-          name: 'first.md',
-          getFile: async () => new File(['# First'], 'first.md'),
-        });
+        resolveFirstHandle = () =>
+          r({
+            kind: 'file' as const,
+            name: 'first.md',
+            getFile: async () => new File(['# First'], 'first.md'),
+          });
       });
       const secondHandle = {
         kind: 'file' as const,
@@ -358,7 +361,7 @@ describe('DirectorySource', () => {
       let treeGen = 0;
       let committedTree: string = '';
       const refreshTree = async (gen: number, delayMs: number, resultName: string) => {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         if (gen === treeGen) {
           committedTree = resultName;
         }
@@ -446,12 +449,14 @@ describe('DirectorySource', () => {
       // Render with sourceA, identical markdown text and docPath
       const markdown = '# Test\n\n![diagram](image.png)';
       act(() => {
-        root.render(React.createElement(MarkdownView, {
-          text: markdown,
-          baseUrl: '',
-          docPath: 'doc.md',
-          directorySource: sourceA,
-        }));
+        root.render(
+          React.createElement(MarkdownView, {
+            text: markdown,
+            baseUrl: '',
+            docPath: 'doc.md',
+            directorySource: sourceA,
+          }),
+        );
       });
 
       // Allow image resolution microtasks to finish
@@ -467,12 +472,14 @@ describe('DirectorySource', () => {
 
       // Now switch source to sourceB with IDENTICAL text and docPath
       act(() => {
-        root.render(React.createElement(MarkdownView, {
-          text: markdown,
-          baseUrl: '',
-          docPath: 'doc.md',
-          directorySource: sourceB,
-        }));
+        root.render(
+          React.createElement(MarkdownView, {
+            text: markdown,
+            baseUrl: '',
+            docPath: 'doc.md',
+            directorySource: sourceB,
+          }),
+        );
       });
 
       await act(async () => {
@@ -505,7 +512,9 @@ describe('DirectorySource', () => {
       const sourceA = new DirectorySource(rootA as unknown as FileSystemDirectoryHandle, 'doc.md');
 
       let finishInFlightA!: () => void;
-      const inFlightA = new Promise<void>((r) => { finishInFlightA = r; });
+      const inFlightA = new Promise<void>((r) => {
+        finishInFlightA = r;
+      });
       const origResolveA = sourceA.resolveImage.bind(sourceA);
       vi.spyOn(sourceA, 'resolveImage').mockImplementation(async (src, fromPath, fallback) => {
         const res = await origResolveA(src, fromPath, fallback);
@@ -523,22 +532,26 @@ describe('DirectorySource', () => {
 
       // Render with sourceA
       act(() => {
-        root.render(React.createElement(MarkdownView, {
-          text: '# Test\n\n![diagram](image.png)',
-          baseUrl: '',
-          docPath: 'doc.md',
-          directorySource: sourceA,
-        }));
+        root.render(
+          React.createElement(MarkdownView, {
+            text: '# Test\n\n![diagram](image.png)',
+            baseUrl: '',
+            docPath: 'doc.md',
+            directorySource: sourceA,
+          }),
+        );
       });
 
       // Switch to sourceB while sourceA image work is still in flight
       act(() => {
-        root.render(React.createElement(MarkdownView, {
-          text: '# Test\n\n![diagram](image.png)',
-          baseUrl: '',
-          docPath: 'doc.md',
-          directorySource: sourceB,
-        }));
+        root.render(
+          React.createElement(MarkdownView, {
+            text: '# Test\n\n![diagram](image.png)',
+            baseUrl: '',
+            docPath: 'doc.md',
+            directorySource: sourceB,
+          }),
+        );
       });
 
       // Now complete sourceA's delayed resolution
@@ -575,15 +588,18 @@ describe('DirectorySource', () => {
       const root = createRoot(container);
 
       // Document larger than 64 KB (PREFIX_TRIGGER_CHARS) with image in first block
-      const largeDoc = '# Prefix Doc\n\n![prefix diagram](image.png)\n\n' + 'Paragraph of plain text content that takes up space.\n\n'.repeat(2000);
+      const largeDoc =
+        '# Prefix Doc\n\n![prefix diagram](image.png)\n\n' + 'Paragraph of plain text content that takes up space.\n\n'.repeat(2000);
 
       act(() => {
-        root.render(React.createElement(MarkdownView, {
-          text: largeDoc,
-          baseUrl: '',
-          docPath: 'doc.md',
-          directorySource: source,
-        }));
+        root.render(
+          React.createElement(MarkdownView, {
+            text: largeDoc,
+            baseUrl: '',
+            docPath: 'doc.md',
+            directorySource: source,
+          }),
+        );
       });
 
       await act(async () => {
@@ -615,7 +631,9 @@ describe('DirectorySource', () => {
       const source = new DirectorySource(rootFolder as unknown as FileSystemDirectoryHandle, 'doc.md');
 
       let finishPrefixWork!: () => void;
-      const prefixGate = new Promise<void>((r) => { finishPrefixWork = r; });
+      const prefixGate = new Promise<void>((r) => {
+        finishPrefixWork = r;
+      });
       let calls = 0;
       const origResolve = source.resolveImage.bind(source);
       vi.spyOn(source, 'resolveImage').mockImplementation(async (src, fromPath, fallback) => {
@@ -635,12 +653,14 @@ describe('DirectorySource', () => {
       const largeDoc = '# Prefix Doc\n\n![prefix diagram](image.png)\n\n' + 'Paragraph of plain text content.\n\n'.repeat(2000);
 
       act(() => {
-        root.render(React.createElement(MarkdownView, {
-          text: largeDoc,
-          baseUrl: '',
-          docPath: 'doc.md',
-          directorySource: source,
-        }));
+        root.render(
+          React.createElement(MarkdownView, {
+            text: largeDoc,
+            baseUrl: '',
+            docPath: 'doc.md',
+            directorySource: source,
+          }),
+        );
       });
 
       // At this point, prefix has mounted and prefix image work is paused.
@@ -672,7 +692,9 @@ describe('DirectorySource', () => {
       const source = new DirectorySource(rootDir as unknown as FileSystemDirectoryHandle, 'doc.md');
 
       let resolveSlowImage!: () => void;
-      const slowImagePromise = new Promise<void>((r) => { resolveSlowImage = r; });
+      const slowImagePromise = new Promise<void>((r) => {
+        resolveSlowImage = r;
+      });
       const origResolve = source.resolveImage.bind(source);
       vi.spyOn(source, 'resolveImage').mockImplementation(async (src, fromPath, fallback) => {
         await slowImagePromise;
@@ -685,13 +707,15 @@ describe('DirectorySource', () => {
       const viewRef = React.createRef<MarkdownViewHandle>();
 
       act(() => {
-        root.render(React.createElement(MarkdownView, {
-          ref: viewRef,
-          text: '# Doc\n\n![My Photo](photo.png)',
-          baseUrl: '',
-          docPath: 'doc.md',
-          directorySource: source,
-        }));
+        root.render(
+          React.createElement(MarkdownView, {
+            ref: viewRef,
+            text: '# Doc\n\n![My Photo](photo.png)',
+            baseUrl: '',
+            docPath: 'doc.md',
+            directorySource: source,
+          }),
+        );
       });
 
       let readyResolved = false;

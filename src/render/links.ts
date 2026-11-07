@@ -1,15 +1,29 @@
 import { resolveRelativePath, type DirectorySource } from '../source/directory';
 
 export function resolveLink(element: Element, baseUrl: string): void {
-  const base = (() => { try { return baseUrl ? new URL(baseUrl) : null; } catch { return null; } })();
+  const base = (() => {
+    try {
+      return baseUrl ? new URL(baseUrl) : null;
+    } catch {
+      return null;
+    }
+  })();
   for (const attribute of ['href', 'src']) {
     const value = element.getAttribute(attribute);
     if (!value || (attribute === 'href' && value.startsWith('#'))) continue;
     let resolved: URL;
-    try { resolved = new URL(value, baseUrl || undefined); } catch { continue; }
+    try {
+      resolved = new URL(value, baseUrl || undefined);
+    } catch {
+      continue;
+    }
     element.setAttribute(attribute, resolved.href);
     if (attribute === 'href' && /\.(?:md|markdown)$/i.test(resolved.pathname)) element.setAttribute('data-md-link', '');
-    if (attribute === 'href' && /^https?:$/.test(resolved.protocol) && (!base || base.protocol === 'file:' || resolved.origin !== base.origin)) {
+    if (
+      attribute === 'href' &&
+      /^https?:$/.test(resolved.protocol) &&
+      (!base || base.protocol === 'file:' || resolved.origin !== base.origin)
+    ) {
       element.setAttribute('target', '_blank');
     }
   }
@@ -72,7 +86,7 @@ export async function resolveFolderImages(
   currentDocPath: string,
   fallbackBaseUrl?: string,
   signal?: AbortSignal,
-  onUrlCreated?: (url: string) => void
+  onUrlCreated?: (url: string) => void,
 ): Promise<void> {
   const images = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]'));
   for (const img of images) {

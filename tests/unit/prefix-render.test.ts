@@ -66,13 +66,19 @@ describe('planPrefix', () => {
 
 describe('prefix boundary on real documents', () => {
   const markdownDir = resolve('tests/fixtures/markdown');
-  const documents = readdirSync(markdownDir).filter((name) => name.endsWith('.md')).sort().map((name) => readFileSync(resolve(markdownDir, name), 'utf8'));
-  const benchmark = `# Benchmark document\n\n${'A realistic paragraph with **bold text**, a [link](https://example.test), and ordinary prose for a reader.\n\n'.repeat(Math.ceil(1024 * 1024 / 120))}`;
+  const documents = readdirSync(markdownDir)
+    .filter((name) => name.endsWith('.md'))
+    .sort()
+    .map((name) => readFileSync(resolve(markdownDir, name), 'utf8'));
+  const benchmark = `# Benchmark document\n\n${'A realistic paragraph with **bold text**, a [link](https://example.test), and ordinary prose for a reader.\n\n'.repeat(Math.ceil((1024 * 1024) / 120))}`;
 
-  it.each([...documents, benchmark].map((text, index) => [index, text] as const))('document %i: prefix ends at a block boundary and its fragment is sanitized', (_index, text) => {
-    const prefix = planPrefix(text, BASE, 16 * 1024);
-    if (prefix === null) return;
-    expect(prefix.html).toBe(sanitize(prefix.html, BASE));
-    expect(prefix.html).toBe(render(text.slice(0, prefix.end), BASE).html);
-  });
+  it.each([...documents, benchmark].map((text, index) => [index, text] as const))(
+    'document %i: prefix ends at a block boundary and its fragment is sanitized',
+    (_index, text) => {
+      const prefix = planPrefix(text, BASE, 16 * 1024);
+      if (prefix === null) return;
+      expect(prefix.html).toBe(sanitize(prefix.html, BASE));
+      expect(prefix.html).toBe(render(text.slice(0, prefix.end), BASE).html);
+    },
+  );
 });

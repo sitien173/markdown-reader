@@ -17,10 +17,12 @@ export type Heading = { level: number; text: string; id: string };
 
 function plainText(token: { children?: any[] | null; content: string }): string {
   if (!token.children) return token.content;
-  return token.children.map((child: any) => {
-    if (child.type === 'text' || child.type === 'code_inline' || child.type === 'image') return child.content;
-    return child.children ? plainText(child) : '';
-  }).join('');
+  return token.children
+    .map((child: any) => {
+      if (child.type === 'text' || child.type === 'code_inline' || child.type === 'image') return child.content;
+      return child.children ? plainText(child) : '';
+    })
+    .join('');
 }
 
 function normalizePlugin<T>(pluginModule: T | { default?: T }): T {
@@ -63,7 +65,8 @@ function collectHeadings(tokens: any[]): Heading[] {
     if (token.type !== 'heading_open') continue;
     const inline = tokens[i + 1];
     const id = token.attrGet('id');
-    if (id && inline) headings.push({ level: Number(token.tag.slice(1)), text: plainText(inline).trim(), id: `${USER_CONTENT_PREFIX}${String(id)}` });
+    if (id && inline)
+      headings.push({ level: Number(token.tag.slice(1)), text: plainText(inline).trim(), id: `${USER_CONTENT_PREFIX}${String(id)}` });
   }
   return headings;
 }
@@ -73,7 +76,7 @@ export type RenderedBlock = { key: string; html: string };
 export type BlockPlan = { keys: string[]; headings: Heading[]; html(index: number): string };
 
 // Reference definitions, footnotes, and abbreviation definitions make a block's output depend on other blocks.
-const FULL_RENDER_GUARD = /^[ \t>*+\-]*(?:\d+[.)])?[ \t>*+\-]*\[[^\]\n]+\]:|\[\^|^[ \t>*+\-]*(?:\d+[.)])?[ \t>*+\-]*\*\[/m;
+const FULL_RENDER_GUARD = /^[ \t>*+-]*(?:\d+[.)])?[ \t>*+-]*\[[^\]\n]+\]:|\[\^|^[ \t>*+-]*(?:\d+[.)])?[ \t>*+-]*\*\[/m;
 
 type BlockGroup = { tokens: any[]; env: any; start: number; end: number };
 // The previous parse, kept between keystrokes so an edit re-parses only the blocks around it.
@@ -83,18 +86,27 @@ export function createParseState(): ParseState {
 }
 
 const isNonLocal = (tokens: any[]) => tokens.some((token) => token.type === 'html_block');
-const headingTokens = (groups: BlockGroup[]) => groups.flatMap((group) => group.tokens.flatMap((token, index) => (token.type === 'heading_open' ? [[token, group.tokens[index + 1]] as [any, any]] : [])));
+const headingTokens = (groups: BlockGroup[]) =>
+  groups.flatMap((group) =>
+    group.tokens.flatMap((token, index) => (token.type === 'heading_open' ? [[token, group.tokens[index + 1]] as [any, any]] : [])),
+  );
 const signature = (group: BlockGroup) => group.tokens.map((token) => `${token.type}:${token.tag}:${token.markup}`).join(',');
 
 // Parses lines[from, to) on its own and splits it into top-level blocks with absolute line ranges.
 function parseGroups(lines: string[], from: number, to: number): { groups: BlockGroup[]; local: boolean } | null {
   const env: any = {};
   const tokens = md.parse(lines.slice(from, to).join('\n'), env) as any[];
-  const local = !(env.references && Object.keys(env.references).length > 0) && !(env.abbreviations && Object.keys(env.abbreviations).length > 0) && !isNonLocal(tokens);
+  const local =
+    !(env.references && Object.keys(env.references).length > 0) &&
+    !(env.abbreviations && Object.keys(env.abbreviations).length > 0) &&
+    !isNonLocal(tokens);
   const raw: any[][] = [];
   let current: any[] = [];
   for (const token of tokens) {
-    if (token.level === 0 && token.nesting !== -1 && current.length > 0) { raw.push(current); current = []; }
+    if (token.level === 0 && token.nesting !== -1 && current.length > 0) {
+      raw.push(current);
+      current = [];
+    }
     current.push(token);
   }
   if (current.length > 0) raw.push(current);
@@ -102,7 +114,12 @@ function parseGroups(lines: string[], from: number, to: number): { groups: Block
   for (const group of raw) {
     const mapped = group.filter((token) => token.map);
     if (mapped.length === 0) return null;
-    groups.push({ tokens: group, env, start: from + Math.min(...mapped.map((token) => token.map[0])), end: from + Math.max(...mapped.map((token) => token.map[1])) });
+    groups.push({
+      tokens: group,
+      env,
+      start: from + Math.min(...mapped.map((token) => token.map[0])),
+      end: from + Math.max(...mapped.map((token) => token.map[1])),
+    });
   }
   return { groups, local };
 }
@@ -116,7 +133,10 @@ function reparse(state: ParseState, lines: string[]): BlockGroup[] | null {
   const limit = Math.min(old.length, lines.length);
   let head = 0;
   while (head < limit && old[head] === lines[head]) head++;
-  if (head === old.length && head === lines.length) { state.parsedLines = 0; return groups; }
+  if (head === old.length && head === lines.length) {
+    state.parsedLines = 0;
+    return groups;
+  }
   let tail = 0;
   while (tail < limit - head && old[old.length - 1 - tail] === lines[lines.length - 1 - tail]) tail++;
   const changeEnd = old.length - tail;
@@ -124,7 +144,11 @@ function reparse(state: ParseState, lines: string[]): BlockGroup[] | null {
   let first = groups.findIndex((group) => group.end >= head);
   if (first === -1) first = groups.length;
   let last = -1;
-  for (let index = groups.length - 1; index >= 0; index--) if (groups[index]!.start <= changeEnd) { last = index; break; }
+  for (let index = groups.length - 1; index >= 0; index--)
+    if (groups[index]!.start <= changeEnd) {
+      last = index;
+      break;
+    }
   // Two unchanged blocks on each side: block rules look ahead past a block's own lines, so the second block
   // after the edit proves the parse has resynced. The region runs up to the next kept block, or to the end.
   const before = Math.max(first - 2, 0);
@@ -136,13 +160,24 @@ function reparse(state: ParseState, lines: string[]): BlockGroup[] | null {
   // Heading ids come from a document-wide slug table, so the region keeps its old ids only when its headings are unchanged.
   const oldHeadings = headingTokens(groups.slice(before, after + 1));
   const newHeadings = headingTokens(parsed.groups);
-  if (oldHeadings.length !== newHeadings.length || oldHeadings.some(([, inline], index) => inline.content !== newHeadings[index]![1].content)) return null;
-  newHeadings.forEach(([token], index) => token.attrSet('id', oldHeadings[index]![0].attrGet('id')));
+  if (
+    oldHeadings.length !== newHeadings.length ||
+    oldHeadings.some(([, inline], index) => inline.content !== newHeadings[index]![1].content)
+  )
+    return null;
+  newHeadings.forEach(([token], index) => {
+    token.attrSet('id', oldHeadings[index]![0].attrGet('id'));
+  });
   if (after + 1 < groups.length) {
     const matches = (offset: number) => {
       const resynced = parsed.groups.at(-offset);
       const previous = groups[after + 1 - offset]!;
-      return resynced !== undefined && resynced.start === previous.start + delta && resynced.end === previous.end + delta && signature(resynced) === signature(previous);
+      return (
+        resynced !== undefined &&
+        resynced.start === previous.start + delta &&
+        resynced.end === previous.end + delta &&
+        signature(resynced) === signature(previous)
+      );
     };
     if (!matches(1) || !matches(2)) return null;
   }
@@ -156,7 +191,10 @@ function reparse(state: ParseState, lines: string[]): BlockGroup[] | null {
 // a keystroke also re-parses only the blocks around the edit.
 export function planBlocks(text: string, baseUrl: string, cache: Map<string, string>, state?: ParseState): BlockPlan {
   const fallback = (): BlockPlan => {
-    if (state) { state.groups = null; state.lines = []; }
+    if (state) {
+      state.groups = null;
+      state.lines = [];
+    }
     const full = render(text, baseUrl);
     return { keys: [`full\u0000${text}`], headings: full.headings, html: () => full.html };
   };
@@ -170,11 +208,17 @@ export function planBlocks(text: string, baseUrl: string, cache: Map<string, str
     groups = parsed.groups;
     if (state) state.parsedLines = lines.length;
   }
-  if (state) { state.lines = lines; state.groups = groups; }
+  if (state) {
+    state.lines = lines;
+    state.groups = groups;
+  }
   const keys: string[] = [];
   const renderers: Array<() => string> = [];
   for (const group of groups) {
-    const ids = group.tokens.filter((token) => token.type === 'heading_open').map((token) => String(token.attrGet('id') ?? '')).join(',');
+    const ids = group.tokens
+      .filter((token) => token.type === 'heading_open')
+      .map((token) => String(token.attrGet('id') ?? ''))
+      .join(',');
     const key = `${lines.slice(group.start, group.end).join('\n')}\u0000${ids}`;
     keys.push(key);
     renderers.push(() => {
@@ -190,7 +234,12 @@ export function planBlocks(text: string, baseUrl: string, cache: Map<string, str
   return { keys, headings: collectHeadings(groups.flatMap((group) => group.tokens)), html: (index) => renderers[index]!() };
 }
 
-export function renderBlocks(text: string, baseUrl: string, cache: Map<string, string>, state?: ParseState): { blocks: RenderedBlock[]; headings: Heading[] } {
+export function renderBlocks(
+  text: string,
+  baseUrl: string,
+  cache: Map<string, string>,
+  state?: ParseState,
+): { blocks: RenderedBlock[]; headings: Heading[] } {
   const plan = planBlocks(text, baseUrl, cache, state);
   return { blocks: plan.keys.map((key, index) => ({ key, html: plan.html(index) })), headings: plan.headings };
 }

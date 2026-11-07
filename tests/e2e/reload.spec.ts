@@ -16,7 +16,7 @@ async function launchContext(userDataDir: string): Promise<BrowserContext> {
 }
 
 async function extensionIdFor(context: BrowserContext): Promise<string> {
-  const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
   return new URL(worker.url()).host;
 }
 
@@ -43,9 +43,9 @@ test('rewriting a file:// fixture re-renders the reader without user action', as
   try {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(pathToFileURL(file).href)}&mode=read`);
-    await expect(page.locator('.tds-custom-markdown h1')).toHaveText('First version', { timeout: 20000 });
+    await expect(page.locator('.md-content h1')).toHaveText('First version', { timeout: 20000 });
     await writeFile(file, '# Second version\n\nBeta.\n');
-    await expect(page.locator('.tds-custom-markdown h1')).toHaveText('Second version', { timeout: 20000 });
+    await expect(page.locator('.md-content h1')).toHaveText('Second version', { timeout: 20000 });
   } finally {
     await context.close();
     await rm(dir, { recursive: true, force: true });
@@ -60,18 +60,19 @@ test('a dirty editor shows "File changed on disk: Reload" instead of reloading',
   try {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(pathToFileURL(file).href)}&mode=split`);
-    await expect(page.locator('.tds-custom-markdown h1')).toHaveText('First version', { timeout: 20000 });
+    await expect(page.locator('.md-content h1')).toHaveText('First version', { timeout: 20000 });
     await page.locator('.cm-content').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' edited locally');
-    await expect(page.locator('.tds-announcement', { hasText: 'Unsaved draft' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
     await writeFile(file, '# Changed on disk\n\nBeta.\n');
-    const banner = page.locator('.tds-announcement', { hasText: 'File changed on disk' });
-    await expect(banner).toContainText('File changed on disk: Reload', { timeout: 20000 });
-    await expect(page.locator('.tds-custom-markdown h1')).toHaveText('First version');
+    const banner = page.getByRole('status').filter({ hasText: 'File changed on disk' });
+    await expect(banner).toContainText('File changed on disk', { timeout: 20000 });
+    await expect(banner.getByRole('button', { name: 'Reload' })).toBeVisible();
+    await expect(page.locator('.md-content h1')).toHaveText('First version');
     await expect(page.locator('.cm-content')).toContainText('edited locally');
     await banner.getByRole('button', { name: 'Reload' }).click();
-    await expect(page.locator('.tds-custom-markdown h1')).toHaveText('Changed on disk', { timeout: 20000 });
+    await expect(page.locator('.md-content h1')).toHaveText('Changed on disk', { timeout: 20000 });
   } finally {
     await context.close();
     await rm(dir, { recursive: true, force: true });
