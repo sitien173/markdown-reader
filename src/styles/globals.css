@@ -1,6 +1,8 @@
+@layer theme, base, components, utilities;
 @import "./tds/tokens.css";
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
 @import "./tds/button.css" layer(components);
 @import "./tds/icon-button.css" layer(components);
 @import "./tds/segmented-control.css" layer(components);

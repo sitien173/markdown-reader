@@ -1,9 +1,46 @@
-.tds-custom-markdown { color: var(--text-default); font-family: var(--font-family); line-height: 1.65; overflow: clip; }
-.tds-custom-markdown h1,.tds-custom-markdown h2,.tds-custom-markdown h3,.tds-custom-markdown h4,.tds-custom-markdown h5,.tds-custom-markdown h6 { font-family: var(--font-family-display); scroll-margin-top: var(--padding-2xl); }
+.tds-custom-markdown { color: var(--text-default); font-family: var(--font-family); font-size: var(--font-size-md); line-height: 1.65; overflow: clip; width: 100%; max-width: 56rem; margin-inline: auto; overflow-wrap: break-word; }
+.tds-custom-markdown h1,.tds-custom-markdown h2,.tds-custom-markdown h3,.tds-custom-markdown h4,.tds-custom-markdown h5,.tds-custom-markdown h6 { font-family: var(--font-family); font-weight: var(--font-weight-semibold); line-height: 1.25; margin: var(--margin-md) 0 var(--margin-sm); scroll-margin-top: var(--padding-2xl); }
+.tds-custom-markdown h1 { font-size: var(--font-size-4xl); padding-bottom: var(--padding-sm); border-bottom: 1px solid var(--border-divider); }
+.tds-custom-markdown h2 { font-size: var(--font-size-2xl); padding-bottom: var(--padding-sm); border-bottom: 1px solid var(--border-divider); }
+.tds-custom-markdown h3 { font-size: var(--font-size-xl); }
+.tds-custom-markdown h4 { font-size: var(--font-size-lg); }
+.tds-custom-markdown h5 { font-size: var(--font-size-md); }
+.tds-custom-markdown h6 { font-size: var(--font-size-sm); color: var(--text-description); }
+.tds-custom-markdown > .tds-custom-md-block:first-child > :first-child { margin-top: 0; }
+.tds-custom-markdown p,.tds-custom-markdown ul,.tds-custom-markdown ol,.tds-custom-markdown dl,.tds-custom-markdown blockquote,.tds-custom-markdown pre,.tds-custom-markdown table,.tds-custom-markdown .markdown-alert,.tds-custom-markdown .table-wrapper { margin: 0 0 var(--margin-sm); }
+.tds-custom-markdown ul { list-style: disc; padding-inline-start: var(--padding-2xl); }
+.tds-custom-markdown ol { list-style: decimal; padding-inline-start: var(--padding-2xl); }
+.tds-custom-markdown ul ul { list-style: circle; }
+.tds-custom-markdown li > ul,.tds-custom-markdown li > ol { margin: var(--gap-xs) 0 0; }
+.tds-custom-markdown li + li { margin-top: var(--gap-xs); }
+.tds-custom-markdown .contains-task-list { list-style: none; padding-inline-start: var(--padding-sm); }
+.tds-custom-markdown .task-list-item-checkbox { margin-inline-end: var(--gap-sm); vertical-align: middle; }
+.tds-custom-markdown strong,.tds-custom-markdown dt { font-weight: var(--font-weight-semibold); }
+.tds-custom-markdown dd { margin-inline-start: var(--padding-xl); }
+.tds-custom-markdown hr { border: 0; border-top: 1px solid var(--border-subtle); margin: var(--margin-md) 0; }
+.tds-custom-markdown mark { background: var(--surface-intermediate); color: inherit; padding: 0 var(--padding-xs); border-radius: var(--radius-xs); }
+.tds-custom-markdown abbr[title] { text-decoration: underline dotted; cursor: help; }
 .tds-custom-markdown pre,.tds-custom-markdown .table-wrapper,.tds-custom-markdown table { overflow: auto; max-width: 100%; }
 .tds-custom-markdown pre,.tds-custom-markdown code { font-family: var(--font-family-mono); }
-.tds-custom-markdown pre { background: var(--surface-neutral-02); padding: var(--padding-lg); }
-.tds-custom-markdown a { color: var(--text-link); }
-.tds-custom-markdown blockquote { border-inline-start: 3px solid var(--border-strong); padding-inline-start: var(--padding-lg); }
+.tds-custom-markdown code { font-size: 0.875em; background: var(--surface-neutral-02); padding: 0.125em var(--padding-xs); border-radius: var(--radius-sm); }
+.tds-custom-markdown pre { background: var(--surface-neutral-02); padding: var(--padding-lg); border: 1px solid var(--border-subtle); border-radius: var(--radius-card); font-size: var(--font-size-sm); line-height: 1.5; }
+.tds-custom-markdown pre code { background: none; padding: 0; font-size: inherit; border-radius: 0; }
+.tds-custom-markdown table { display: block; width: max-content; border-collapse: collapse; font-size: var(--font-size-sm); }
+.tds-custom-markdown th,.tds-custom-markdown td { border: 1px solid var(--border-subtle); padding: var(--padding-sm) var(--padding-md); text-align: start; vertical-align: top; }
+.tds-custom-markdown th { background: var(--surface-neutral-02); font-weight: var(--font-weight-semibold); }
+.tds-custom-markdown a { color: var(--text-link); text-decoration: underline; text-underline-offset: 2px; }
+.tds-custom-markdown blockquote { border-inline-start: 3px solid var(--border-strong); padding-inline-start: var(--padding-lg); color: var(--text-description); }
+.tds-custom-markdown .markdown-alert { border-inline-start: 3px solid var(--border-strong); padding: var(--padding-sm) var(--padding-lg); border-radius: var(--radius-sm); background: var(--surface-neutral-02); }
+.tds-custom-markdown .markdown-alert > :last-child { margin-bottom: 0; }
+.tds-custom-markdown .markdown-alert-title { display: flex; align-items: center; gap: var(--gap-sm); font-weight: var(--font-weight-semibold); margin-bottom: var(--gap-xs); }
+.tds-custom-markdown .markdown-alert-title svg { fill: currentColor; }
+.tds-custom-markdown .markdown-alert-note,.tds-custom-markdown .markdown-alert-tip { border-color: var(--border-focus); background: var(--surface-selected); }
+.tds-custom-markdown .markdown-alert-note .markdown-alert-title,.tds-custom-markdown .markdown-alert-tip .markdown-alert-title { color: var(--text-link); }
+.tds-custom-markdown .markdown-alert-important,.tds-custom-markdown .markdown-alert-warning { border-color: var(--border-intermediate); background: var(--surface-intermediate); }
+.tds-custom-markdown .markdown-alert-important .markdown-alert-title,.tds-custom-markdown .markdown-alert-warning .markdown-alert-title { color: var(--text-intermediate); }
+.tds-custom-markdown .markdown-alert-caution { border-color: var(--border-negative); background: var(--surface-negative); }
+.tds-custom-markdown .markdown-alert-caution .markdown-alert-title { color: var(--text-negative); }
+.tds-custom-markdown .footnotes-sep { margin-top: var(--margin-lg); }
+.tds-custom-markdown .footnotes-list { font-size: var(--font-size-sm); color: var(--text-description); }
 .tds-custom-markdown img { max-width: 100%; }
-@media print { .tds-custom-markdown { overflow: visible; } }
+@media print { .tds-custom-markdown { overflow: visible; max-width: none; } }

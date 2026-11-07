@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const toggleVariants = cva(
- "tds-segmented-control",
+ "tds-segmented-control__item",
  {
  variants: {
  variant: {

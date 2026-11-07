@@ -1,15 +1,18 @@
-.tds-custom-reader { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; overflow: hidden; background: var(--surface-neutral-02); color: var(--text-default); }
+.tds-custom-reader { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--surface-neutral-02); color: var(--text-default); }
 .tds-custom-reader__bar { display: flex; align-items: center; gap: var(--gap-md); padding: var(--padding-md) var(--padding-xl); background: var(--surface-neutral-01); border-bottom: 1px solid var(--border-subtle); }
 .tds-custom-reader__url { display: flex; align-items: end; gap: var(--gap-sm); flex: 1; }
 .tds-custom-reader__url input { min-width: 10rem; flex: 1; }
 .tds-custom-reader__content { min-width: 0; min-height: 0; }
 .tds-custom-reader__toc { overflow: auto; }
+.tds-custom-reader__toc .tds-tabs { margin-bottom: var(--margin-sm); }
 .tds-custom-reader__content { scroll-behavior: smooth; }
 .tds-custom-reader .tds-spinner { background-image: none !important; border: 3px solid var(--border-subtle); border-top-color: var(--interactive-default); border-radius: 50%; }
 .tds-nav-list { list-style: none; padding-inline-start: var(--padding-md); }
 .tds-side-nav__nav-item { color: var(--text-description); background: transparent; border: 0; cursor: pointer; }
 .tds-side-nav__nav-item--active { color: var(--interactive-default); font-weight: var(--font-weight-semibold); }
-.tds-custom-reader__body { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.tds-custom-reader__body { display: grid; grid-template-columns: 16rem minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
+.tds-custom-reader__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap-md); padding: var(--padding-sm) var(--padding-xl); background: var(--surface-neutral-01); border-bottom: 1px solid var(--border-subtle); }
+.tds-custom-reader__toolbar:empty { display: none; }
 .tds-custom-reader__toc { padding: var(--padding-lg); border-inline-end: 1px solid var(--border-subtle); background: var(--surface-neutral-01); }
 .tds-custom-reader__content { overflow: auto; padding: var(--padding-2xl); background: var(--surface-neutral-01); }
 .tds-custom-reader__error { display: flex; align-items: center; gap: var(--gap-md); }
@@ -34,6 +37,7 @@
     background: transparent !important;
   }
   .tds-custom-reader__bar,
+  .tds-custom-reader__toolbar,
   .tds-segmented-control,
   .tds-custom-reader__toc,
   .tds-announcement,
