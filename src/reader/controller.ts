@@ -3,12 +3,14 @@ import { dropFileIdentity, FileHandleSource, isValidMarkdownFile, SaveConflictEr
 import { usableCapturedText } from '../source/captured-text';
 import { FileUrlSource } from '../source/file-url';
 import { isAllowedUrl, UrlSource } from '../source/url';
+import { fileIntervalMs, httpIntervalMs } from '../source/watch';
 import { createDraftSaver, draftKey, loadDraft } from '../store/drafts';
 import { storeHandle } from '../store/handles';
 import { addRecentUrl, getRecentEntries, type RecentItem } from '../store/recent';
+import { useSettingsStore } from '../store/settings-store';
 import { createReaderStore, type Mode, type ReaderStore } from '../store/reader-store';
 
-type Active = FileHandleSource | FileUrlSource | DirectorySource;
+type Active = FileHandleSource | FileUrlSource | UrlSource | DirectorySource;
 
 function findFirstFile(nodes: TreeNode[]): FileNode | null {
   for (const node of nodes) {
@@ -71,6 +73,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       text: value,
       mountText: value,
       loadId: s.loadId + 1,
+      sourceId: id,
       docTitle: title ?? s.docTitle,
       ...(loading === undefined ? {} : { loading }),
     }));
@@ -89,35 +92,62 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       .catch(() => undefined);
   }
 
-  function setActive(next: FileHandleSource | FileUrlSource | null) {
+  /** Starts the watcher that fits the active source and the current auto-refresh settings. */
+  function startWatch() {
+    stopWatch();
+    const current = active;
+    if (!current) return;
+    const { autoRefresh, autoRefreshRemote, autoRefreshIntervalSec } = useSettingsStore.getState().settings.general;
+    const intervalMs = fileIntervalMs(autoRefreshIntervalSec);
+    const onChange = () => {
+      if (useSettingsStore.getState().settings.general.autoRefresh) void checkExternal();
+    };
+    if (current instanceof DirectorySource) {
+      unwatch = current.watch({
+        intervalMs,
+        onTreeChange: () => {
+          const gen = ++treeGen;
+          void current
+            .getTree()
+            .then((t) => {
+              if (gen !== treeGen || active !== current) return;
+              set({ treeNodes: t });
+            })
+            .catch(() => undefined);
+        },
+        onChange,
+        onDeleted: () => notify('The folder was deleted or is no longer accessible.'),
+      });
+    } else if (current instanceof FileHandleSource) {
+      unwatch = current.watch({
+        intervalMs,
+        onChange,
+        onDeleted: () => notify('The file was deleted from disk. Your draft is still in the editor.'),
+      });
+    } else if (current instanceof FileUrlSource) {
+      if (autoRefresh)
+        unwatch = current.watch({
+          intervalMs,
+          onChange,
+          onDeleted: () => notify('The file was deleted from disk. Your draft is still in the editor.'),
+        });
+    } else if (autoRefresh && autoRefreshRemote) {
+      unwatch = current.watch({ intervalMs: httpIntervalMs(autoRefreshIntervalSec), onChange, onDeleted: () => undefined });
+    }
+  }
+
+  function setActive(next: FileHandleSource | FileUrlSource | UrlSource | null) {
     stopWatch();
     active = next;
     set({ writable: next instanceof FileHandleSource, externalChange: false });
-    if (!next) return;
-    unwatch = next.watch({
-      onChange: () => void checkExternal(),
-      onDeleted: () => notify('The file was deleted from disk. Your draft is still in the editor.'),
-    });
+    startWatch();
   }
 
   function setActiveDirectory(dirSource: DirectorySource, filePath: string | null) {
     stopWatch();
     active = dirSource;
     set({ writable: Boolean(filePath), externalChange: false });
-    unwatch = dirSource.watch({
-      onTreeChange: () => {
-        const gen = ++treeGen;
-        void dirSource
-          .getTree()
-          .then((t) => {
-            if (gen !== treeGen || active !== dirSource) return;
-            set({ treeNodes: t });
-          })
-          .catch(() => undefined);
-      },
-      onChange: () => void checkExternal(),
-      onDeleted: () => notify('The folder was deleted or is no longer accessible.'),
-    });
+    startWatch();
   }
 
   async function refreshRecents() {
@@ -255,12 +285,15 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       const entry = saved[key];
       await browser.storage.session.remove(key);
       if (!isCurrent(gen, null, loadId)) return;
-      const capturedText = usableCapturedText(entry, url);
-      const fileSource = parsed.protocol === 'file:' ? new FileUrlSource(url) : null;
-      const value = capturedText ?? (await (fileSource ?? new UrlSource(url)).read());
+      const { charsetCompat } = useSettingsStore.getState().settings.general;
+      const fileSource = parsed.protocol === 'file:' ? new FileUrlSource(url, charsetCompat) : null;
+      // Captured page text is already decoded by the browser, so charset compatibility re-reads the file bytes instead.
+      const capturedText = fileSource && charsetCompat ? undefined : usableCapturedText(entry, url);
+      const source = fileSource ?? new UrlSource(url, charsetCompat);
+      const value = capturedText ?? (await source.read());
       if (!isCurrent(gen, null, loadId)) return;
       applyText(value, url, urlTitle(url), false);
-      setActive(fileSource);
+      setActive(source);
       void addRecentUrl(url)
         .then(() => refreshRecents())
         .catch(() => undefined);
@@ -460,6 +493,16 @@ export function createController(store: ReaderStore = createReaderStore(), notif
   function mount() {
     disposed = false;
     window.addEventListener('pagehide', stopWatch);
+    const unsubscribe = useSettingsStore.subscribe((next, prev) => {
+      const a = next.settings.general;
+      const b = prev.settings.general;
+      if (
+        a.autoRefresh !== b.autoRefresh ||
+        a.autoRefreshRemote !== b.autoRefreshRemote ||
+        a.autoRefreshIntervalSec !== b.autoRefreshIntervalSec
+      )
+        startWatch();
+    });
     if (!started) {
       started = true;
       void refreshRecents();
@@ -468,6 +511,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
     }
     return () => {
       window.removeEventListener('pagehide', stopWatch);
+      unsubscribe();
       dispose();
     };
   }

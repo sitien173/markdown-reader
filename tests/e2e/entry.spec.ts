@@ -61,6 +61,11 @@ test('popup actions open the requested reader mode and recent URLs are newest fi
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
   const popupButton = popup.getByRole('button', { name: 'Open viewer' });
   await popup.bringToFront();
+  // The rail tab, then the scrollable pane, are tab stops before the first action.
+  await popup.keyboard.press('Tab');
+  await expect(popup.getByRole('tab', { name: 'General' })).toBeFocused();
+  await popup.keyboard.press('Tab');
+  await expect(popup.getByRole('tabpanel')).toBeFocused();
   await popup.keyboard.press('Tab');
   await expect(popupButton).toBeFocused();
   await expect(popupButton).toHaveCSS('outline-style', 'solid');
@@ -80,4 +85,41 @@ test('popup actions open the requested reader mode and recent URLs are newest fi
   await expect(popup2.getByRole('region', { name: 'Recent URLs' })).toContainText(`${origin}/two.md`);
   const recentText = await popup2.getByRole('region', { name: 'Recent URLs' }).innerText();
   expect(recentText.indexOf('/two.md')).toBeLessThan(recentText.indexOf('/one.md'));
+});
+
+test('popup shows a role=alert error when the current tab cannot be rendered', async ({ context, extensionId }) => {
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.getByRole('button', { name: 'Render current tab' }).click();
+  await expect(popup.getByRole('alert')).toHaveText('This page URL cannot be opened.');
+});
+
+test('Reset settings confirms, writes defaults, and returns focus to its trigger', async ({ context, extensionId }) => {
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  type Stored = { general: { renderTxt: boolean } };
+  type ChromeWindow = {
+    chrome: { storage: { local: { get(key: string): Promise<Record<string, unknown>>; set(items: object): Promise<void> } } };
+  };
+  const readRenderTxt = () =>
+    popup.evaluate(async () => {
+      const stored = await (window as unknown as ChromeWindow).chrome.storage.local.get('settings:v1');
+      return (stored['settings:v1'] as Stored).general.renderTxt;
+    });
+  await popup.evaluate(() =>
+    (window as unknown as ChromeWindow).chrome.storage.local.set({ 'settings:v1': { version: 1, general: { renderTxt: true } } }),
+  );
+  const trigger = popup.getByRole('button', { name: 'Reset settings' });
+  await trigger.click();
+  const dialog = popup.getByRole('dialog', { name: 'Reset all settings?' });
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  expect(await readRenderTxt()).toBe(true);
+
+  await trigger.click();
+  await dialog.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect.poll(readRenderTxt).toBe(false);
 });

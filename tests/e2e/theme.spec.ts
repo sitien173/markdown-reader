@@ -28,7 +28,7 @@ test('Base UI theme tokens resolve on the reader page and no legacy design-syste
 
 test('semantic color utilities generate rules: the export menu paints the popover color', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/reader.html`);
-  await page.getByRole('button', { name: 'Export options' }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
   const menu = page.getByRole('menu');
   await expect(menu).toBeVisible();
   const popover = await resolveColor(page, 'var(--popover)');
@@ -127,5 +127,65 @@ test('print emulation shows light tokens in the dark scheme', async ({ page, ext
     expect(printFill.fill).toBe('rgb(245, 245, 247)');
     expect(printFill.fill).not.toBe(dark.diagramFill);
     expect(await resolveColor(page, 'var(--foreground)')).toBe('rgb(29, 29, 31)');
+  });
+});
+
+type Appearance = Record<string, unknown>;
+// Writes through storage.local, so the open reader receives the change through its onChanged listener and is never reloaded.
+const setAppearance = (page: import('@playwright/test').Page, appearance: Appearance) =>
+  page.evaluate(
+    (value) =>
+      (globalThis as unknown as { chrome: { storage: { local: { set(items: object): Promise<void> } } } }).chrome.storage.local.set({
+        'settings:v1': { version: 1, appearance: value },
+      }),
+    appearance,
+  );
+
+const LIGHT_BG = 'rgb(255, 255, 255)';
+const DARK_BG = 'rgb(28, 28, 30)';
+
+test('Light forces light tokens in a dark system', async ({ page, extensionId }) => {
+  await withThemedDoc(page, extensionId, 'dark', async () => {
+    expect((await surfaces(page)).body).toBe(DARK_BG);
+    const darkFill = (await surfaces(page)).diagramFill;
+    await setAppearance(page, { theme: 'light' });
+    await expect.poll(async () => (await surfaces(page)).body).toBe(LIGHT_BG);
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('light');
+    expect(await resolveColor(page, 'var(--foreground)')).toBe('rgb(29, 29, 31)');
+    await expect.poll(async () => (await surfaces(page)).diagramFill).not.toBe(darkFill);
+    expect((await surfaces(page)).diagramFill).toBe(await resolveColor(page, 'var(--muted)'));
+  });
+});
+
+test('Dark forces dark tokens in a light system and Mermaid redraws in dark', async ({ page, extensionId }) => {
+  await withThemedDoc(page, extensionId, 'light', async () => {
+    const light = await surfaces(page);
+    expect(light.body).toBe(LIGHT_BG);
+    await setAppearance(page, { theme: 'dark' });
+    await expect.poll(async () => (await surfaces(page)).body).toBe(DARK_BG);
+    expect(await resolveColor(page, 'var(--foreground)')).toBe('rgb(245, 245, 247)');
+    await expect.poll(async () => (await surfaces(page)).diagramFill).not.toBe(light.diagramFill);
+    expect((await surfaces(page)).diagramFill).toBe(await resolveColor(page, 'var(--muted)'));
+  });
+});
+
+test('Auto follows the system and removes data-theme', async ({ page, extensionId }) => {
+  await withThemedDoc(page, extensionId, 'light', async () => {
+    await setAppearance(page, { theme: 'dark' });
+    await expect.poll(async () => (await surfaces(page)).body).toBe(DARK_BG);
+    await setAppearance(page, { theme: 'auto' });
+    await expect.poll(async () => (await surfaces(page)).body).toBe(LIGHT_BG);
+    expect(await page.evaluate(() => document.documentElement.hasAttribute('data-theme'))).toBe(false);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect.poll(async () => (await surfaces(page)).body).toBe(DARK_BG);
+  });
+});
+
+test('print stays light when the theme is forced dark', async ({ page, extensionId }) => {
+  await withThemedDoc(page, extensionId, 'light', async () => {
+    await setAppearance(page, { theme: 'dark' });
+    await expect.poll(async () => (await surfaces(page)).body).toBe(DARK_BG);
+    await page.emulateMedia({ colorScheme: 'light', media: 'print' });
+    expect((await surfaces(page)).body).toBe(LIGHT_BG);
   });
 });

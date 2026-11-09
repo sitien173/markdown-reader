@@ -2,12 +2,12 @@
   position: relative;
   isolation: isolate;
   color: var(--foreground);
-  font-family: var(--font-body);
-  font-size: 1rem;
+  font-family: var(--md-font, var(--font-body));
+  font-size: calc(1rem * var(--md-scale, 1));
   line-height: 1.65;
   overflow: clip;
   width: 100%;
-  max-width: 56rem;
+  max-width: var(--md-max-width, 56rem);
   margin-inline: auto;
   overflow-wrap: break-word;
 }
@@ -17,7 +17,7 @@
 .md-content h4,
 .md-content h5,
 .md-content h6 {
-  font-family: var(--font-body);
+  font-family: var(--md-font, var(--font-body));
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.01em;
@@ -25,26 +25,26 @@
   scroll-margin-top: 2rem;
 }
 .md-content h1 {
-  font-size: 2rem;
+  font-size: 2em;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 .md-content h2 {
-  font-size: 1.5rem;
+  font-size: 1.5em;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 .md-content h3 {
-  font-size: 1.25rem;
+  font-size: 1.25em;
 }
 .md-content h4 {
-  font-size: 1.125rem;
+  font-size: 1.125em;
 }
 .md-content h5 {
-  font-size: 1rem;
+  font-size: 1em;
 }
 .md-content h6 {
-  font-size: 0.875rem;
+  font-size: 0.875em;
   color: var(--muted-foreground);
 }
 .md-content > .md-block:first-child > :first-child {
@@ -130,7 +130,7 @@
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 0.875rem;
+  font-size: 0.875em;
   line-height: 1.5;
 }
 .md-content pre code {
@@ -143,7 +143,7 @@
   display: block;
   width: max-content;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.875em;
 }
 .md-content th,
 .md-content td {
@@ -214,7 +214,7 @@
   margin-top: 2rem;
 }
 .md-content .footnotes-list {
-  font-size: 0.875rem;
+  font-size: 0.875em;
   color: var(--muted-foreground);
 }
 .md-content img {
@@ -223,13 +223,63 @@
 .md-block {
   display: contents;
 }
-/* Shiki emits both themes; the dark values arrive as --shiki-dark and --shiki-dark-bg in inline styles, so the override needs !important. `screen` keeps print light. */
+/* Layout settings arrive as root classes from appearance.ts and from the export. */
+:root:not(.md-centered) .md-content {
+  margin-inline: 0 auto;
+}
+:root.md-wrap-code .md-content pre,
+:root.md-wrap-code .md-content pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+:root.md-wide-tables .md-content {
+  overflow: visible;
+}
+:root.md-wide-tables .md-content table,
+:root.md-wide-tables .md-content .table-wrapper {
+  max-width: min(90rem, calc(100vw - 4rem));
+}
+/* Shiki emits both themes; the dark values arrive as --shiki-dark and --shiki-dark-bg in inline styles, so the override needs !important. `screen` keeps print light.
+   The root data-code-light and data-code-dark values pick which bundled theme each scheme shows; without them the defaults apply (light in light, dark in dark). */
 @media screen and (prefers-color-scheme: dark) {
-  .md-content .shiki,
-  .md-content .shiki span {
+  :root:not([data-theme="light"], [data-code-dark="light"]) .md-content .shiki,
+  :root:not([data-theme="light"], [data-code-dark="light"]) .md-content .shiki span {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
     color: var(--shiki-dark) !important;
   }
-  .md-content .shiki {
+  :root:not([data-theme="light"], [data-code-dark="light"]) .md-content .shiki {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
+    background-color: var(--shiki-dark-bg) !important;
+  }
+}
+@media screen {
+  :root[data-theme="dark"]:not([data-code-dark="light"]) .md-content .shiki,
+  :root[data-theme="dark"]:not([data-code-dark="light"]) .md-content .shiki span {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
+    color: var(--shiki-dark) !important;
+  }
+  :root[data-theme="dark"]:not([data-code-dark="light"]) .md-content .shiki {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
+    background-color: var(--shiki-dark-bg) !important;
+  }
+  :root[data-theme="light"][data-code-light="dark"] .md-content .shiki,
+  :root[data-theme="light"][data-code-light="dark"] .md-content .shiki span {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
+    color: var(--shiki-dark) !important;
+  }
+  :root[data-theme="light"][data-code-light="dark"] .md-content .shiki {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
+    background-color: var(--shiki-dark-bg) !important;
+  }
+}
+@media screen and (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"])[data-code-light="dark"] .md-content .shiki,
+  :root:not([data-theme="dark"])[data-code-light="dark"] .md-content .shiki span {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
+    color: var(--shiki-dark) !important;
+  }
+  :root:not([data-theme="dark"])[data-code-light="dark"] .md-content .shiki {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki writes the light colors as inline styles */
     background-color: var(--shiki-dark-bg) !important;
   }
 }

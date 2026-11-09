@@ -43,8 +43,8 @@ test.afterAll(async () => {
   await new Promise<void>((r) => server.close(() => r()));
 });
 async function openUrl(page: Page, href: string) {
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'URL' }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Open URL' }).click();
   const dialog = page.getByRole('dialog', { name: 'Open URL' });
   await dialog.getByLabel('Markdown URL').fill(href);
   await dialog.getByRole('button', { name: 'Open URL' }).click();
@@ -92,11 +92,11 @@ test('URL source, retry, nested TOC, file picker, and keyboard focus', async ({ 
       { getFile: async () => new File(['# Local file'], 'local.md', { type: 'text/markdown' }) },
     ];
   });
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'File' }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Open file' }).click();
   await expect(page.locator('.md-content h1').first()).toHaveText('Local file');
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'URL' }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Open URL' }).click();
   await page.getByLabel('Markdown URL').focus();
   await expect(page.getByLabel('Markdown URL')).toHaveCSS('outline-style', 'solid');
 });
@@ -106,7 +106,7 @@ test('fragment links stay in the reader, resolved links update src, and unsafe l
   await openUrl(page, `${url}/footnotes.md`);
   await expect(page.locator('.md-content')).toContainText('Footnote target');
   const before = page.url();
-  await page.locator('.md-content a[href^="#"]').first().click();
+  await page.locator('.md-content a[href^="#"]:not(.md-permalink)').first().click();
   expect(page.url()).toBe(before);
   const target = page.locator('.md-content li[id*="fn"]');
   await expect(target.first()).toBeInViewport();
@@ -131,26 +131,24 @@ test('Tab traversal exposes visible focus on URL, file, and sidebar tabs', async
       return (style.outlineStyle !== 'none' && style.outlineWidth !== '0px') || style.boxShadow !== 'none';
     });
   const expected = [
-    page.getByRole('button', { name: 'Open', exact: true }),
-    page.getByRole('button', { name: 'Export options' }),
-    page.getByRole('button', { name: 'Command palette' }),
-    page.getByRole('tab', { name: 'Contents' }),
+    page.getByRole('button', { name: 'Menu' }),
+    page.getByRole('group', { name: 'Sidebar view' }).getByRole('button', { name: 'Files' }),
   ];
   await page.getByRole('button', { name: 'Toggle sidebar' }).focus();
   for (const control of expected) {
     await page.keyboard.press('Tab');
     await expect(control).toBeFocused();
-    expect(await focused(), `visible focus on ${await control.textContent()}`).toBe(true);
+    expect(await focused(), `visible focus on ${await control.getAttribute('aria-label')}`).toBe(true);
   }
   await page.keyboard.press('ArrowRight');
-  const filesTab = page.getByRole('tab', { name: 'Files' });
-  await expect(filesTab).toBeFocused();
-  expect(await focused(), 'visible focus on Files tab').toBe(true);
+  const outlineButton = page.getByRole('group', { name: 'Sidebar view' }).getByRole('button', { name: 'Outline' });
+  await expect(outlineButton).toBeFocused();
+  expect(await focused(), 'visible focus on Outline button').toBe(true);
 });
 
 test('Open folder stays reachable from the Files tab after leaving the top bar', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/reader.html`);
-  await page.getByRole('tab', { name: 'Files' }).click();
+  await page.getByRole('group', { name: 'Sidebar view' }).getByRole('button', { name: 'Files' }).click();
   const filesPanel = page.locator('[data-slot="reader-toc"]').getByRole('button', { name: 'Open folder' });
   await expect(filesPanel).toBeVisible();
   await expect(filesPanel).toHaveCount(1);

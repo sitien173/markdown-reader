@@ -98,7 +98,7 @@ async function click(el: HTMLElement | undefined) {
   await flush();
 }
 async function showFilesTab() {
-  const tab = byText('[role="tab"]', 'Files')!;
+  const tab = container.ownerDocument.querySelector<HTMLElement>('[aria-label="Sidebar view"] [aria-label="Files"]')!;
   await act(async () => {
     tab.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   });

@@ -53,6 +53,7 @@ async function openDocument(page: Page, extensionId: string, query = '') {
 }
 
 async function openPalette(page: Page) {
+  await page.locator('#root > *').first().waitFor();
   await page.keyboard.press('Control+k');
   await expect(palette(page)).toBeVisible();
   await expect(paletteInput(page)).toBeFocused();
@@ -61,7 +62,9 @@ async function openPalette(page: Page) {
 test.describe('open and close', () => {
   test('Ctrl+K opens the palette on a non-Mac platform and focuses the input', async ({ page, extensionId }) => {
     await page.goto(readerUrl(extensionId));
-    await expect(page.getByRole('button', { name: 'Command palette' })).toContainText('Ctrl+K');
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Command palette' })).toContainText('Ctrl+K');
+    await page.keyboard.press('Escape');
     await openPalette(page);
     await expect(palette(page).getByText('Actions', { exact: true })).toBeVisible();
   });
@@ -69,7 +72,9 @@ test.describe('open and close', () => {
   test('Cmd+K opens the palette on macOS', async ({ page, extensionId }) => {
     await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { value: 'MacIntel' }));
     await page.goto(readerUrl(extensionId));
-    await expect(page.getByRole('button', { name: 'Command palette' })).toContainText('⌘K');
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Command palette' })).toContainText('⌘K');
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Control+k');
     await expect(palette(page)).toBeHidden();
     await page.keyboard.press('Meta+k');
@@ -78,7 +83,8 @@ test.describe('open and close', () => {
 
   test('the toolbar button opens the palette', async ({ page, extensionId }) => {
     await page.goto(readerUrl(extensionId));
-    await page.getByRole('button', { name: 'Command palette' }).click();
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('menuitem', { name: 'Command palette' }).click();
     await expect(palette(page)).toBeVisible();
   });
 
@@ -97,10 +103,10 @@ test.describe('open and close', () => {
     await openPalette(page);
     for (let i = 0; i < 4; i += 1) {
       await page.keyboard.press('Tab');
-      expect(await palette(page).evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+      await expect.poll(() => palette(page).evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
     }
     await page.keyboard.press('Shift+Tab');
-    expect(await palette(page).evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+    await expect.poll(() => palette(page).evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
   });
 });
 
@@ -110,7 +116,7 @@ test.describe('commands', () => {
     await openPalette(page);
     for (const name of ['Open file', 'Open folder', 'Open URL', 'Toggle sidebar'])
       await expect(item(page, name)).not.toHaveAttribute('aria-disabled', 'true');
-    for (const name of ['Save', 'Read mode', 'Edit mode', 'Split mode', 'Export HTML', 'Print', 'Focus mode']) {
+    for (const name of ['Save', 'Read mode', 'Edit mode', 'Split mode', 'Export HTML', 'Print', 'Zen mode']) {
       await expect(item(page, name)).toBeVisible();
       await expect(item(page, name)).toHaveAttribute('aria-disabled', 'true');
     }
@@ -275,7 +281,7 @@ test.describe('shortcuts', () => {
     await openDocument(page, extensionId);
     await page.keyboard.press('Control+p');
     await expect.poll(() => counts(page).then((c) => c.print)).toBe(1);
-    await page.getByRole('button', { name: 'Export options' }).click();
+    await page.getByRole('button', { name: 'Menu' }).click();
     await page.getByRole('menuitem', { name: 'Print' }).click();
     await expect.poll(() => counts(page).then((c) => c.print)).toBe(2);
     await openPalette(page);
@@ -378,7 +384,7 @@ test.describe('shortcuts', () => {
 test('focus mode from the palette hides the toolbar and Escape exits', async ({ page, extensionId }) => {
   await openDocument(page, extensionId);
   await openPalette(page);
-  await paletteInput(page).fill('focus');
+  await paletteInput(page).fill('zen');
   await page.keyboard.press('Enter');
   await expect(page.locator('main.reader')).toHaveAttribute('data-focus', 'true');
   await page.keyboard.press('Escape');
@@ -405,8 +411,8 @@ test('Escape right after choosing Focus mode exits it while the palette is still
   let held = false;
   for (let attempt = 0; attempt < 4 && !held; attempt++) {
     await openPalette(page);
-    await paletteInput(page).fill('focus');
-    await item(page, 'Focus mode').click();
+    await paletteInput(page).fill('zen');
+    await item(page, 'Zen mode').click();
     await expect(reader).toHaveAttribute('data-focus', 'true');
     held = (await closing.count()) === 1;
     if (!held) {

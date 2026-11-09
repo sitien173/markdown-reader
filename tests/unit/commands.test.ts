@@ -26,6 +26,10 @@ beforeEach(() => {
     print: vi.fn(),
     toggleSidebar: vi.fn(),
     toggleFocusMode: vi.fn(),
+    toggleRaw: vi.fn(),
+    toggleFullscreen: vi.fn(),
+    openSettings: vi.fn(),
+    openAbout: vi.fn(),
     openPalette: vi.fn(),
   };
   commands = createCommands(deps as unknown as CommandDeps);
@@ -46,6 +50,10 @@ describe('command registry', () => {
       'print',
       'toggle-sidebar',
       'focus-mode',
+      'toggle-raw',
+      'toggle-fullscreen',
+      'settings',
+      'about',
       'command-palette',
     ]);
     expect(new Set(ids).size).toBe(ids.length);
@@ -64,6 +72,10 @@ describe('command registry', () => {
     find('print').run();
     find('toggle-sidebar').run();
     find('focus-mode').run();
+    find('toggle-raw').run();
+    find('toggle-fullscreen').run();
+    find('settings').run();
+    find('about').run();
     find('command-palette').run();
     expect(deps.openFile).toHaveBeenCalledTimes(1);
     expect(deps.openFolder).toHaveBeenCalledTimes(1);
@@ -74,6 +86,10 @@ describe('command registry', () => {
     expect(deps.print).toHaveBeenCalledTimes(1);
     expect(deps.toggleSidebar).toHaveBeenCalledTimes(1);
     expect(deps.toggleFocusMode).toHaveBeenCalledTimes(1);
+    expect(deps.toggleRaw).toHaveBeenCalledTimes(1);
+    expect(deps.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(deps.openSettings).toHaveBeenCalledTimes(1);
+    expect(deps.openAbout).toHaveBeenCalledTimes(1);
     expect(deps.openPalette).toHaveBeenCalledTimes(1);
   });
 
@@ -85,17 +101,27 @@ describe('command registry', () => {
   });
 
   it('keeps open and sidebar commands available without a document', () => {
-    for (const id of ['open-file', 'open-folder', 'open-url', 'toggle-sidebar', 'command-palette'] as const)
+    for (const id of [
+      'open-file',
+      'open-folder',
+      'open-url',
+      'toggle-sidebar',
+      'toggle-fullscreen',
+      'settings',
+      'about',
+      'command-palette',
+    ] as const)
       expect(find(id).available(base)).toBe(true);
   });
 
   it('disables document commands without a document', () => {
-    for (const id of ['save', 'mode-read', 'mode-edit', 'mode-split', 'export-html', 'print', 'focus-mode'] as const)
+    for (const id of ['save', 'mode-read', 'mode-edit', 'mode-split', 'export-html', 'print', 'focus-mode', 'toggle-raw'] as const)
       expect(find(id).available(base), id).toBe(false);
   });
 
   it('enables document commands when a document is open', () => {
-    for (const id of ['mode-read', 'mode-edit', 'mode-split', 'focus-mode'] as const) expect(find(id).available(withDoc()), id).toBe(true);
+    for (const id of ['mode-read', 'mode-edit', 'mode-split', 'focus-mode', 'toggle-raw'] as const)
+      expect(find(id).available(withDoc()), id).toBe(true);
   });
 
   it('offers save only for a writable document', () => {
@@ -116,6 +142,27 @@ describe('command registry', () => {
     expect(find('toggle-sidebar').shortcut).toBe('Mod+\\');
     expect(find('print').shortcut).toBe('Mod+P');
     expect(find('command-palette').shortcut).toBe('Mod+K');
+  });
+});
+
+describe('Phase 6 commands', () => {
+  it('labels the new commands and relabels focus-mode as Zen mode without changing its id', () => {
+    expect(find('toggle-raw').label).toBe('Toggle Raw');
+    expect(find('toggle-fullscreen').label).toBe('Toggle Fullscreen');
+    expect(find('settings').label).toBe('Settings');
+    expect(find('about').label).toBe('About');
+    expect(find('focus-mode').label).toBe('Zen mode');
+  });
+
+  it('binds no shortcut beyond the five existing ones', () => {
+    const bound = Object.fromEntries(commands.filter((c) => c.shortcut).map((c) => [c.id, c.shortcut]));
+    expect(bound).toEqual({
+      'open-file': 'Mod+O',
+      save: 'Mod+S',
+      print: 'Mod+P',
+      'toggle-sidebar': 'Mod+\\',
+      'command-palette': 'Mod+K',
+    });
   });
 });
 

@@ -27,7 +27,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/c.md`)}`);
       await expect(page.locator('.md-content h1')).toHaveText('Title', { timeout: 20000 });
       // Open the palette once so a popover surface is rendered. Every value below is read from :root tokens, not from it.
-      await page.getByRole('button', { name: 'Command palette' }).click();
+      await page.keyboard.press('Control+k');
       await expect(page.getByRole('dialog')).toBeVisible();
       await page.keyboard.press('Escape');
 
@@ -103,7 +103,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
 // Self-contained so Playwright can serialize it: the text color of an element and the color it is composited over,
 // layering every ancestor background from the root down so translucent surfaces resolve correctly.
-function pairInPage(el: Element): { fg: number[] | null; bg: number[] | null } {
+function pairInPage(el: Element, fgOverride?: string): { fg: number[] | null; bg: number[] | null } {
   const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('no 2d context');
   const pixel = (layers: string[]): number[] => {
@@ -119,7 +119,7 @@ function pairInPage(el: Element): { fg: number[] | null; bg: number[] | null } {
     const bg = getComputedStyle(node).backgroundColor;
     if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') layers.unshift(bg);
   }
-  const fg = getComputedStyle(el).color;
+  const fg = fgOverride ?? getComputedStyle(el).color;
   return { fg: fg ? pixel([fg]) : null, bg: layers.length ? pixel(['#fff', ...layers]) : null };
 }
 
@@ -157,8 +157,8 @@ async function openWithPicker(page: Page, text: string) {
     await writable.close();
     (window as unknown as { showOpenFilePicker: () => Promise<unknown[]> }).showOpenFilePicker = async () => [handle];
   }, text);
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'File' }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Open file' }).click();
   await expect(page.locator('.md-content h1').first()).toBeVisible({ timeout: 20000 });
 }
 
@@ -176,7 +176,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expectContrast(scheme, 'note alert title', page.locator('.markdown-alert-note .markdown-alert-title'));
       await expectContrast(scheme, 'caution alert title', page.locator('.markdown-alert-caution .markdown-alert-title'));
 
-      await page.getByRole('button', { name: 'Command palette' }).click();
+      await page.keyboard.press('Control+k');
       await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('Open URL');
       await page.keyboard.press('Enter');
       await page.getByLabel('Markdown URL').fill(`${origin}/missing.md`);
@@ -212,3 +212,192 @@ for (const scheme of ['light', 'dark'] as const) {
     }
   });
 }
+
+// Forced theme: the OS scheme says the opposite, so only the stored Appearance setting can make the surface right.
+const forceTheme = async (page: Page, theme: 'light' | 'dark') => {
+  await page.emulateMedia({ colorScheme: theme === 'light' ? 'dark' : 'light', reducedMotion: 'reduce' });
+  await page.evaluate(
+    (value) =>
+      (globalThis as unknown as { chrome: { storage: { local: { set(items: object): Promise<void> } } } }).chrome.storage.local.set({
+        'settings:v1': { version: 1, appearance: { theme: value } },
+      }),
+    theme,
+  );
+  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+};
+
+// Every visible text node owner and placeholder under the scope, with its text color and composited background.
+async function lowContrast(scope: Locator, min = TEXT, only?: string) {
+  await expect(scope.first()).toBeVisible();
+  const pairs = await scope.first().evaluate(
+    (root, { src, only }) => {
+      const pair = new Function(`return ${src}`)() as (el: Element, fg?: string) => { fg: number[] | null; bg: number[] | null };
+      const rendered = (el: Element) => {
+        const style = getComputedStyle(el);
+        return (
+          style.visibility !== 'hidden' &&
+          style.display !== 'none' &&
+          el.getClientRects().length > 0 &&
+          !el.closest('[aria-hidden="true"], [inert]')
+        );
+      };
+      const out: Array<{ name: string; fg: number[] | null; bg: number[] | null }> = [];
+      if (only) {
+        for (const el of root.querySelectorAll(only)) if (rendered(el)) out.push({ name: `${el.getAttribute('aria-label')}`, ...pair(el) });
+        return out;
+      }
+      for (const el of [root, ...root.querySelectorAll('*')]) {
+        if (!rendered(el) || (el as HTMLButtonElement).disabled) continue;
+        const name = `${el.tagName.toLowerCase()}[${el.getAttribute('data-slot') ?? el.getAttribute('aria-label') ?? el.className}]`;
+        const ownText = [...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim());
+        if (ownText) out.push({ name: `${name} "${el.textContent?.trim().slice(0, 24)}"`, ...pair(el) });
+        const entry =
+          el instanceof HTMLTextAreaElement ||
+          (el instanceof HTMLInputElement && /^(text|number|search|url|email|password)$/.test(el.type));
+        if (entry) {
+          if (el.value) out.push({ name: `${name} value`, ...pair(el) });
+          if (el.placeholder && !el.value)
+            out.push({ name: `${name} placeholder`, ...pair(el, getComputedStyle(el, '::placeholder').color) });
+        }
+      }
+      return out;
+    },
+    { src: pairInPage.toString(), only },
+  );
+  expect(pairs.length, 'text found in scope').toBeGreaterThan(0);
+  return pairs.filter(({ fg, bg }) => !fg || !bg || ratio(fg as Rgb, bg as Rgb) < min).map(({ name }) => name);
+}
+
+const SURFACE_DOC = ['# Title', '', '## Section', '', '```js', 'const a = 1;', '```', '', 'Body text.', ''].join('\n');
+
+async function openSurfaceDoc(page: Page, extensionId: string, origin: string) {
+  await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/s.md`)}`);
+  await expect(page.locator('.md-content h1')).toHaveText('Title', { timeout: 20000 });
+  await expect(page.locator('.md-code-bar button')).toBeVisible();
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  test.describe(`forced ${scheme} theme on the new surfaces`, () => {
+    for (const surface of ['popup', 'options'] as const) {
+      test(`${surface} text meets 4.5:1 on every tab`, async ({ page, extensionId }) => {
+        // The popup and options entrypoints do not apply the stored theme, so the OS scheme is what forces them.
+        await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+        await page.goto(`chrome-extension://${extensionId}/${surface}.html`);
+        await page.locator('#root > *').first().waitFor();
+        for (const name of ['General', 'Appearance', 'Plugins', 'About']) {
+          await page.getByRole('tab', { name }).click();
+          expect(await lowContrast(page.getByRole('tabpanel')), `${scheme} ${surface} ${name}`).toEqual([]);
+        }
+        expect(await lowContrast(page.getByRole('tablist'), UI, '[role="tab"]'), `${scheme} ${surface} rail icons`).toEqual([]);
+      });
+    }
+
+    test('reader dialog, menu, sidebar, search field, and Copy button meet 4.5:1', async ({ page, extensionId }) => {
+      const { origin, close } = await startFixtureServer((_req, res) => {
+        res.setHeader('content-type', 'text/markdown; charset=utf-8');
+        res.end(SURFACE_DOC);
+      });
+      try {
+        await openSurfaceDoc(page, extensionId, origin);
+        await forceTheme(page, scheme);
+        const sidebar = page.locator('[data-slot="reader-toc"]');
+        expect(await lowContrast(sidebar), `${scheme} sidebar`).toEqual([]);
+        await sidebar.getByRole('button', { name: 'Search' }).click();
+        expect(await lowContrast(sidebar), `${scheme} sidebar search field`).toEqual([]);
+        expect(await lowContrast(page.locator('.md-code-bar')), `${scheme} Copy bar`).toEqual([]);
+
+        await page.getByRole('button', { name: 'Menu' }).click();
+        expect(await lowContrast(page.getByRole('menu')), `${scheme} menu`).toEqual([]);
+        await page.getByRole('menuitem', { name: 'Settings' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Settings' });
+        for (const name of ['General', 'Appearance', 'Plugins', 'About']) {
+          await dialog.getByRole('tab', { name }).click();
+          expect(await lowContrast(dialog.getByRole('tabpanel')), `${scheme} dialog ${name}`).toEqual([]);
+        }
+        await page.keyboard.press('Escape');
+        await page.getByRole('button', { name: 'Menu' }).click();
+        await page.getByRole('menuitem', { name: 'About' }).click();
+        expect(await lowContrast(page.getByRole('dialog', { name: 'About' })), `${scheme} About dialog`).toEqual([]);
+      } finally {
+        await close();
+      }
+    });
+  });
+}
+
+// Axe-free: the browser's own accessibility tree, through CDP, so names come from the real computation.
+const NAMED_ROLES = new Set([
+  'button',
+  'tab',
+  'switch',
+  'combobox',
+  'slider',
+  'checkbox',
+  'radio',
+  'textbox',
+  'searchbox',
+  'spinbutton',
+  'menuitem',
+  'link',
+]);
+
+async function unnamed(page: Page): Promise<string[]> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { nodes } = (await cdp.send('Accessibility.getFullAXTree')) as {
+      nodes: Array<{ ignored?: boolean; role?: { value: string }; name?: { value: string } }>;
+    };
+    return nodes
+      .filter((node) => !node.ignored && NAMED_ROLES.has(node.role?.value ?? '') && !node.name?.value?.trim())
+      .map((node) => node.role?.value ?? '');
+  } finally {
+    await cdp.detach();
+  }
+}
+
+test.describe('accessible names', () => {
+  for (const surface of ['popup', 'options']) {
+    test(`every rail tab, icon button, and control in ${surface}.html is named`, async ({ page, extensionId }) => {
+      await page.goto(`chrome-extension://${extensionId}/${surface}.html`);
+      await page.locator('#root > *').first().waitFor();
+      expect(await page.getByRole('tab').count()).toBe(4);
+      // The max width slider only renders while the custom width switch is on.
+      await page.evaluate(() =>
+        (globalThis as unknown as { chrome: { storage: { local: { set(items: object): Promise<void> } } } }).chrome.storage.local.set({
+          'settings:v1': { version: 1, appearance: { customMaxWidth: true } },
+        }),
+      );
+      for (const name of ['General', 'Appearance', 'Plugins', 'About']) {
+        await page.getByRole('tab', { name }).click();
+        expect(await unnamed(page), `${surface} ${name}`).toEqual([]);
+      }
+    });
+  }
+
+  test('the reader sidebar, menu, dialogs, and Copy buttons are named', async ({ page, extensionId }) => {
+    const { origin, close } = await startFixtureServer((_req, res) => {
+      res.setHeader('content-type', 'text/markdown; charset=utf-8');
+      res.end(SURFACE_DOC);
+    });
+    try {
+      await openSurfaceDoc(page, extensionId, origin);
+      await page.getByRole('button', { name: 'Copy' }).waitFor();
+      await page.locator('[data-slot="reader-toc"]').getByRole('button', { name: 'Search' }).click();
+      expect(await unnamed(page), 'reader').toEqual([]);
+      await page.getByRole('button', { name: 'Menu' }).click();
+      expect(await unnamed(page), 'menu').toEqual([]);
+      await page.getByRole('menuitem', { name: 'Settings' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Settings' });
+      for (const name of ['General', 'Appearance', 'Plugins', 'About']) {
+        await dialog.getByRole('tab', { name }).click();
+        expect(await unnamed(page), `settings dialog ${name}`).toEqual([]);
+      }
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Menu' }).click();
+      await page.getByRole('menuitem', { name: 'About' }).click();
+      expect(await unnamed(page), 'About dialog').toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+});

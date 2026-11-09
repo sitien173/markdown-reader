@@ -1,0 +1,141 @@
+{
+  "note": "Roles and names only, normalized once from the four reference popup snapshots. A null name means the reference control has no accessible name, so any name matches. Reference switches are unnamed generic nodes and carry no role, so they are not listed.",
+  "landmark": "main",
+  "rail": [
+    "General",
+    "Appearance",
+    "Plugins",
+    "About"
+  ],
+  "roleMap": {
+    "spinbutton": "textbox",
+    "combobox": "choice",
+    "radio": "choice"
+  },
+  "tabs": {
+    "general": {
+      "entries": [
+        {
+          "role": "textbox",
+          "name": null
+        },
+        {
+          "role": "choice",
+          "name": null
+        },
+        {
+          "role": "button",
+          "name": "Reset Settings"
+        }
+      ],
+      "missing": [],
+      "extra": [
+        "button:local file access: allowed",
+        "button:open editor",
+        "button:open viewer",
+        "button:render current tab",
+        "heading2:recent",
+        "slider:auto-refresh interval slider"
+      ],
+      "reason": "Extra: the popup open actions and recents are existing popup behavior, the file access row is a named button, and the interval has a slider beside its number field."
+    },
+    "appearance": {
+      "entries": [
+        {
+          "role": "heading",
+          "level": 2,
+          "name": "Appearance"
+        },
+        {
+          "role": "slider",
+          "name": null
+        },
+        {
+          "role": "choice",
+          "name": null
+        },
+        {
+          "role": "choice",
+          "name": null
+        },
+        {
+          "role": "choice",
+          "name": null
+        },
+        {
+          "role": "choice",
+          "name": null
+        },
+        {
+          "role": "slider",
+          "name": null
+        },
+        {
+          "role": "textbox",
+          "name": null
+        },
+        {
+          "role": "choice",
+          "name": null
+        },
+        {
+          "role": "textbox",
+          "name": null
+        },
+        {
+          "role": "button",
+          "name": "Cancel"
+        },
+        {
+          "role": "button",
+          "name": "Apply CSS"
+        }
+      ],
+      "missing": [
+        "button:apply css",
+        "choice:*",
+        "slider:*",
+        "textbox:*"
+      ],
+      "extra": [
+        "button:apply"
+      ],
+      "reason": "Missing: the width slider, number field, and unit select render only while Custom max width is on; there is no unit select. The apply button is named Apply."
+    },
+    "plugins": {
+      "entries": [
+        {
+          "role": "heading",
+          "level": 2,
+          "name": "Plugins"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "reason": "No differences."
+    },
+    "about": {
+      "entries": [
+        {
+          "role": "heading",
+          "level": 1,
+          "name": "Markdown Reader"
+        },
+        {
+          "role": "link",
+          "name": null
+        },
+        {
+          "role": "link",
+          "name": null
+        }
+      ],
+      "missing": [
+        "link:*",
+        "link:*"
+      ],
+      "extra": [],
+      "reason": "Missing: third-party links are a DESIGN non-goal."
+    }
+  }
+}

@@ -70,6 +70,65 @@ describe('enhancement helpers', () => {
   });
 });
 
+describe('code block and heading chrome', () => {
+  const mount = (html: string) => {
+    const root = document.createElement('div');
+    root.innerHTML = html;
+    document.body.append(root);
+    return root;
+  };
+  const stubClipboard = (writeText: (text: string) => Promise<void>) =>
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+  it('adds a language label and a Copy button that writes the exact source and reports Copied', async () => {
+    const writeText = vi.fn(async () => undefined);
+    stubClipboard(writeText);
+    const root = mount('<pre><code class="language-js">const a = 1;\nconst b = 2;\n</code></pre>');
+    const { enhance } = await import('../../src/render/enhance');
+    await enhance(root);
+    expect(root.querySelector('.md-code-lang')?.textContent).toBe('js');
+    const button = root.querySelector('.md-code button') as HTMLButtonElement;
+    expect(button.textContent).toBe('Copy');
+    button.click();
+    await vi.waitFor(() => expect(button.textContent).toBe('Copied'));
+    expect(writeText).toHaveBeenCalledWith('const a = 1;\nconst b = 2;\n');
+    root.remove();
+  });
+
+  it('shows a failure label and does not throw when the clipboard refuses', async () => {
+    stubClipboard(() => Promise.reject(new DOMException('denied', 'NotAllowedError')));
+    const root = mount('<pre><code>plain</code></pre>');
+    const { enhance } = await import('../../src/render/enhance');
+    await enhance(root);
+    const button = root.querySelector('.md-code button') as HTMLButtonElement;
+    button.click();
+    await vi.waitFor(() => expect(button.textContent).toBe('Copy failed'));
+    root.remove();
+  });
+
+  it('adds one aria-hidden, unfocusable permalink to each heading with an id, even when enhanced twice', async () => {
+    const root = mount('<h2 id="user-content-intro">Intro</h2><h3>No id</h3>');
+    const { enhance } = await import('../../src/render/enhance');
+    await enhance(root);
+    await enhance(root);
+    const links = root.querySelectorAll('a.md-permalink');
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute('aria-hidden')).toBe('true');
+    expect(links[0]?.getAttribute('href')).toBe('#user-content-intro');
+    expect([null, '-1']).toContain(links[0]?.getAttribute('tabindex'));
+    expect(root.querySelectorAll('.md-code')).toHaveLength(0);
+    root.remove();
+  });
+
+  it('leaves mermaid blocks without a Copy button', async () => {
+    const root = mount('<pre class="mermaid">graph TD; A--&gt;B</pre>');
+    const { enhance } = await import('../../src/render/enhance');
+    await enhance(root);
+    expect(root.querySelector('.md-code')).toBeNull();
+    root.remove();
+  });
+});
+
 describe('dual-theme highlighting', () => {
   it('emits light and dark colors in one output so the theme switches by CSS alone', async () => {
     const html = (await highlight('const answer = 42;', 'js'))!;

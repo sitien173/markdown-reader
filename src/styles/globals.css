@@ -5,9 +5,6 @@
 @import "./markdown.css";
 @import "tailwindcss";
 
-/* No .dark class exists; dark mode follows the system theme. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
-
 /* Reset the default palette before the semantic mappings; a later reset would wipe them. */
 @theme {
   --color-*: initial;
@@ -101,6 +98,61 @@
     --alert-caution-bg: #3d1a1a;
   }
 }
+/* A forced theme applies on screen only; print below stays light. Auto removes data-theme, so the system rules above apply. */
+@media screen {
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --background: #ffffff;
+    --foreground: #1d1d1f;
+    --card: #ffffff;
+    --card-foreground: #1d1d1f;
+    --popover: #ffffff;
+    --popover-foreground: #1d1d1f;
+    --primary: #0066cc;
+    --primary-foreground: #ffffff;
+    --secondary: #f5f5f7;
+    --secondary-foreground: #1d1d1f;
+    --muted: #f5f5f7;
+    --muted-foreground: #6e6e73;
+    --accent: #ececf0;
+    --accent-foreground: #1d1d1f;
+    --destructive: #d70015;
+    --border: #d9d9de;
+    --input: #d2d2d7;
+    --ring: #0066cc;
+    --alert-note-bg: #eaf3fc;
+    --alert-warning: #c77c00;
+    --alert-warning-bg: #fff6e0;
+    --alert-warning-foreground: #7a4b00;
+    --alert-caution-bg: #fdeceb;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --background: #1c1c1e;
+    --foreground: #f5f5f7;
+    --card: #1c1c1e;
+    --card-foreground: #f5f5f7;
+    --popover: #2c2c2e;
+    --popover-foreground: #f5f5f7;
+    --primary: #4da3ff;
+    --primary-foreground: #0b0b0c;
+    --secondary: #2c2c2e;
+    --secondary-foreground: #f5f5f7;
+    --muted: #2c2c2e;
+    --muted-foreground: #a1a1a6;
+    --accent: #3a3a3c;
+    --accent-foreground: #f5f5f7;
+    --destructive: #ff6961;
+    --border: #3a3a3c;
+    --input: #48484a;
+    --ring: #4da3ff;
+    --alert-note-bg: #12263a;
+    --alert-warning: #f0a030;
+    --alert-warning-bg: #3a2c0f;
+    --alert-warning-foreground: #ffd27a;
+    --alert-caution-bg: #3d1a1a;
+  }
+}
 /* Print is always light. */
 @media print {
   :root {
@@ -128,6 +180,18 @@
     --alert-warning-bg: #fff6e0;
     --alert-warning-foreground: #7a4b00;
     --alert-caution-bg: #fdeceb;
+  }
+}
+
+/* Dark follows the forced theme, or the system theme when data-theme is absent (Auto). */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
   }
 }
 

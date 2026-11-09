@@ -1,12 +1,16 @@
+// @vitest-environment jsdom
 import { act, forwardRef, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { defaultSettings } from '../../src/lib/settings';
+import { pluginKey, planBlocks, type PluginConfig } from '../../src/render/pipeline';
 import type { ReaderStore } from '../../src/store/reader-store';
+import { useSettingsStore } from '../../src/store/settings-store';
 
 // Render counters and the store of the mounted App, shared with the module mocks below.
 const spy = vi.hoisted(() => ({
   store: undefined as unknown as ReaderStore,
-  renders: { toolbar: 0, banner: 0, palette: 0, view: 0, toc: 0 },
+  renders: { toolbar: 0, banner: 0, palette: 0, view: 0, toc: 0, menu: 0 },
 }));
 
 vi.mock('../../src/store/reader-store', async (importActual) => {
@@ -43,6 +47,15 @@ vi.mock('../../src/ui/command-palette', async (importActual) => {
     CommandPalette: (props: Parameters<typeof actual.CommandPalette>[0]) => {
       spy.renders.palette++;
       return <actual.CommandPalette {...props} />;
+    },
+  };
+});
+vi.mock('../../src/ui/reader-menu', async (importActual) => {
+  const actual = await importActual<typeof import('../../src/ui/reader-menu')>();
+  return {
+    ReaderMenu: (props: Parameters<typeof actual.ReaderMenu>[0]) => {
+      spy.renders.menu++;
+      return <actual.ReaderMenu {...props} />;
     },
   };
 });
@@ -90,7 +103,7 @@ beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) };
   vi.stubGlobal('browser', { storage: { local, session: { get: vi.fn(async () => ({})), remove: vi.fn(async () => undefined) } } });
-  window.history.replaceState(null, '', '/?mode=read');
+  window.history.replaceState(null, '', '/?mode=split');
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -146,5 +159,172 @@ describe('reader shell render scope', () => {
     expect(spy.renders.banner).toBeGreaterThan(before.banner);
     expect(spy.renders.toolbar).toBe(before.toolbar);
     expect(spy.renders.view).toBe(before.view);
+  });
+});
+
+describe('reader shell render scope in read mode', () => {
+  beforeEach(async () => {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    window.history.replaceState(null, '', '/?mode=read');
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flush();
+    await act(async () => {
+      spy.store.setState({ text: '# A', mountText: '# A', source: 'file:///a.md', docTitle: 'a.md' });
+    });
+    await flush();
+  });
+
+  it('renders the menu before the scope check runs', () => {
+    expect(spy.renders.menu).toBeGreaterThan(0);
+  });
+
+  it('a write to a field the shell does not render re-renders nothing', async () => {
+    const before = snapshot();
+    await act(async () => {
+      spy.store.setState({ loadId: 0, treeNodes: [] });
+    });
+    await flush();
+    expect(snapshot()).toEqual(before);
+  });
+});
+
+describe('contents panel collapse state', () => {
+  const nested = [
+    { id: 'a', text: 'Alpha', level: 1 },
+    { id: 'b', text: 'Beta', level: 2 },
+  ];
+  const collapseButton = () => container.querySelector<HTMLButtonElement>('button[aria-label="Collapse Alpha"]');
+  beforeEach(async () => {
+    await act(async () => {
+      useSettingsStore.setState({
+        settings: { ...defaultSettings, general: { ...defaultSettings.general, outlineCollapsing: true } },
+      });
+      spy.store.setState({ headings: nested });
+    });
+    await flush();
+    await act(async () => {
+      collapseButton()?.click();
+    });
+  });
+
+  it('keeps collapse state when only the headings change', async () => {
+    expect(container.querySelector('button[aria-label="Expand Alpha"]')).not.toBeNull();
+    await act(async () => {
+      spy.store.setState({ headings: nested.map((h) => ({ ...h })) });
+    });
+    await flush();
+    expect(container.querySelector('button[aria-label="Expand Alpha"]')).not.toBeNull();
+  });
+
+  it('keeps collapse state when loadId bumps for the same source', async () => {
+    await act(async () => {
+      spy.store.setState({ loadId: spy.store.getState().loadId + 1, headings: nested.map((h) => ({ ...h })) });
+    });
+    await flush();
+    expect(container.querySelector('button[aria-label="Expand Alpha"]')).not.toBeNull();
+  });
+
+  it('resets collapse state when the source changes', async () => {
+    expect(container.querySelector('button[aria-label="Expand Alpha"]')).not.toBeNull();
+    await act(async () => {
+      spy.store.setState({ sourceId: 'file:b', loadId: spy.store.getState().loadId + 1, headings: nested.map((h) => ({ ...h })) });
+    });
+    await flush();
+    expect(collapseButton()).not.toBeNull();
+  });
+
+  it('keeps collapse state across split-mode edits', async () => {
+    await act(async () => {
+      spy.store.setState({ text: '# Alpha\n\n## Beta\n\nmore', dirty: true, headings: nested.map((h) => ({ ...h })) });
+    });
+    await flush();
+    expect(container.querySelector('button[aria-label="Expand Alpha"]')).not.toBeNull();
+  });
+});
+
+describe('Escape in fullscreen with a dialog open', () => {
+  afterEach(() => {
+    delete (document as { fullscreenElement?: unknown }).fullscreenElement;
+    document.querySelector('[data-testid="stub-dialog"]')?.remove();
+  });
+
+  async function pressEscape() {
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+  }
+
+  it('leaves fullscreen alone and keeps focus mode while a dialog is open', async () => {
+    const exit = vi.fn(async () => undefined);
+    Object.defineProperty(document, 'fullscreenElement', { value: document.body, configurable: true });
+    document.exitFullscreen = exit;
+    await act(async () => spy.store.setState({ focusMode: true }));
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.dataset.testid = 'stub-dialog';
+    document.body.append(dialog);
+    await pressEscape();
+    expect(exit).not.toHaveBeenCalled();
+    expect(spy.store.getState().focusMode).toBe(true);
+    dialog.remove();
+    await pressEscape();
+    expect(exit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('plugin config reaches the document', () => {
+  const on = defaultSettings.plugins;
+  let host: HTMLElement;
+  let hostRoot: Root;
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.append(host);
+    hostRoot = createRoot(host);
+  });
+  afterEach(async () => {
+    await act(async () => hostRoot.unmount());
+    host.remove();
+  });
+  async function mountView(text: string, plugins: PluginConfig) {
+    const { MarkdownView } = await vi.importActual<typeof import('../../src/ui/markdown-view')>('../../src/ui/markdown-view');
+    const draw = (config: PluginConfig) =>
+      act(async () => {
+        hostRoot.render(<MarkdownView text={text} baseUrl="file:///a.md" plugins={config} pluginKey={pluginKey(config)} />);
+      });
+    await draw(plugins);
+    return draw;
+  }
+
+  it('changing one plugin flag replaces every mounted block', async () => {
+    const draw = await mountView('one\n\ntwo\n\nthree', on);
+    const before = [...host.querySelectorAll('.md-block')];
+    expect(before).toHaveLength(3);
+    await draw({ ...on, emoji: false });
+    const after = [...host.querySelectorAll('.md-block')];
+    expect(after).toHaveLength(3);
+    expect(after.filter((block) => before.includes(block))).toEqual([]);
+  });
+
+  it('a planBlocks key differs when the plugin key differs', () => {
+    const keys = (plugins: PluginConfig) => planBlocks('one\n\ntwo', 'file:///a.md', new Map(), undefined, plugins).keys;
+    const a = keys(on);
+    const b = keys({ ...on, emoji: false });
+    const c = keys({ ...on, emoji: false, mark: false });
+    expect(a).not.toEqual(b);
+    expect(b).not.toEqual(c);
+    expect(a).not.toEqual(c);
+  });
+
+  it('fills [[TOC]] from the headings and refills when they change', async () => {
+    const draw = await mountView('[[TOC]]\n\n# Alpha\n\n## Beta', on);
+    const links = () => [...host.querySelectorAll('[data-toc-placeholder] a')].map((a) => a.textContent);
+    expect(links()).toEqual(['Alpha', 'Beta']);
+    expect(host.querySelector('[data-toc-placeholder] ul ul a')?.textContent).toBe('Beta');
+    expect(host.querySelector('[data-toc-placeholder] a')?.getAttribute('href')).toBe('#user-content-alpha');
+    await draw({ ...on, toc: false });
+    expect(host.querySelector('[data-toc-placeholder]')).toBeNull();
   });
 });

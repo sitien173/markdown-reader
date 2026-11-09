@@ -1,4 +1,15 @@
+import type { Page } from '@playwright/test';
 import { test, expect, startFixtureServer } from './fixtures';
+
+// Read mode has no mode switch, so a mode is reached through the Cmd+K palette command.
+async function runPaletteCommand(page: Page, name: string) {
+  await page.keyboard.press('Control+k');
+  const dialog = page.getByRole('dialog', { name: 'Command palette' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('combobox').fill(name);
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+}
 
 test('typing in Split, switching to Read, then back to Split preserves edited text', async ({ page, extensionId }) => {
   const { origin, close } = await startFixtureServer((_req, res) => {
@@ -18,7 +29,7 @@ test('typing in Split, switching to Read, then back to Split preserves edited te
     await expect(page.locator('.cm-content')).toHaveCount(0);
 
     // Switch back to Split mode
-    await page.getByRole('radio', { name: 'Split', exact: true }).click();
+    await runPaletteCommand(page, 'Split mode');
     await expect(page.locator('.cm-content')).toBeVisible();
     await expect(page.locator('.cm-content')).toContainText('Appended typed text.');
   } finally {

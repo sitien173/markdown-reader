@@ -1,4 +1,5 @@
 import { ChevronRight } from 'lucide-react';
+import { useT } from '../i18n';
 import type { TreeNode } from '../source/directory';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../components/ui/collapsible';
 
@@ -6,16 +7,29 @@ export interface FileTreeProps {
   nodes: TreeNode[];
   activePath?: string | null;
   onSelectFile: (path: string, handle: FileSystemFileHandle) => void;
+  /** Case-insensitive name filter. A folder stays when any file inside it matches. */
+  filter?: string;
 }
 
-export function FileTree({ nodes, activePath, onSelectFile }: FileTreeProps) {
-  if (nodes.length === 0) {
-    return <div className="text-sm">No Markdown files found.</div>;
+function filterTree(nodes: TreeNode[], needle: string): TreeNode[] {
+  return nodes.flatMap<TreeNode>((node) => {
+    if (node.kind !== 'directory') return node.name.toLowerCase().includes(needle) ? [node] : [];
+    const children = filterTree(node.children, needle);
+    return children.length > 0 ? [{ ...node, children }] : [];
+  });
+}
+
+export function FileTree({ nodes, activePath, onSelectFile, filter = '' }: FileTreeProps) {
+  const t = useT();
+  const needle = filter.trim().toLowerCase();
+  const shown = needle ? filterTree(nodes, needle) : nodes;
+  if (shown.length === 0) {
+    return <div className="text-sm">{needle ? t('reader.noMatches') : 'No Markdown files found.'}</div>;
   }
 
   return (
     <ul className="nav-list" data-slot="file-tree">
-      {nodes.map((node) => {
+      {shown.map((node) => {
         if (node.kind === 'directory') {
           return (
             <li key={node.path}>

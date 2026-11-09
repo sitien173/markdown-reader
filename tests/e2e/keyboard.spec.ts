@@ -1,24 +1,29 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 
-test('ArrowRight on the Contents tab moves focus to Files and activates its panel', async ({ page, extensionId }) => {
+test('ArrowLeft on the Outline button moves focus to Files and Space activates its panel', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/reader.html`);
-  const contents = page.getByRole('tab', { name: 'Contents' });
-  const files = page.getByRole('tab', { name: 'Files' });
+  await page.locator('#root > *').first().waitFor();
+  const group = page.getByRole('group', { name: 'Sidebar view' });
+  const contents = group.getByRole('button', { name: 'Outline' });
+  const files = group.getByRole('button', { name: 'Files' });
   await contents.focus();
-  await expect(contents).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('ArrowRight');
-  await expect(files).toBeFocused();
-  await expect(files).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tabpanel')).toContainText('No folder opened.');
+  await expect(contents).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('ArrowLeft');
+  await expect(files).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(files).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-slot="reader-toc"]')).toContainText('No folder opened.');
+  await page.keyboard.press('ArrowRight');
   await expect(contents).toBeFocused();
-  await expect(contents).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Space');
+  await expect(contents).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('Export menu opens with Enter, closes with Escape, and returns focus to the trigger', async ({ page, extensionId }) => {
+test('Floating menu opens with Enter, closes with Escape, and returns focus to the trigger', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/reader.html`);
-  const trigger = page.getByRole('button', { name: 'Export options' });
+  const trigger = page.getByRole('button', { name: 'Menu' });
+  await page.locator('#root > *').first().waitFor();
   await trigger.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('menu')).toBeVisible();

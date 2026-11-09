@@ -41,3 +41,16 @@ declare module 'markdown-it-task-lists' {
   const plugin: (md: MarkdownIt, options?: { enabled?: boolean; label?: boolean }) => void;
   export default plugin;
 }
+declare module 'markdown-it-ins' {
+  import type MarkdownIt from 'markdown-it';
+  const plugin: (md: MarkdownIt) => void;
+  export default plugin;
+}
+declare module 'markdown-it-multimd-table' {
+  import type MarkdownIt from 'markdown-it';
+  const plugin: (
+    md: MarkdownIt,
+    options?: { multiline?: boolean; rowspan?: boolean; headerless?: boolean; multibody?: boolean; autolabel?: boolean },
+  ) => void;
+  export default plugin;
+}

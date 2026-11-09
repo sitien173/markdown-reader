@@ -1,28 +1,35 @@
 import { isAllowedUrl } from '../source/url';
+import { t } from '../i18n';
+import { readGeneralFlags } from '../lib/settings-flags';
 
-export function isMarkdownLink(raw: string): boolean {
+export function isMarkdownLink(raw: string, renderTxt = false): boolean {
   try {
-    return isAllowedUrl(raw) && /\.(?:md|markdown)$/i.test(new URL(raw).pathname);
+    return isAllowedUrl(raw) && (renderTxt ? /\.(?:md|markdown|txt)$/i : /\.(?:md|markdown)$/i).test(new URL(raw).pathname);
   } catch {
     return false;
   }
 }
 
-export function isValidCapture(message: { text?: unknown }, sender: { id?: string; tab?: { url?: string } }, runtimeId: string): boolean {
+export function isValidCapture(
+  message: { text?: unknown },
+  sender: { id?: string; tab?: { url?: string } },
+  runtimeId: string,
+  renderTxt = false,
+): boolean {
   const url = sender.tab?.url;
-  return sender.id === runtimeId && !!url && typeof message.text === 'string' && isMarkdownLink(url);
+  return sender.id === runtimeId && !!url && typeof message.text === 'string' && isMarkdownLink(url, renderTxt);
 }
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(async () => {
     await browser.contextMenus.removeAll();
-    browser.contextMenus.create({ id: 'open-markdown-reader', title: 'Open in Markdown Reader', contexts: ['link'] });
+    browser.contextMenus.create({ id: 'open-markdown-reader', title: t('contextMenu.open'), contexts: ['link'] });
   });
 
   browser.contextMenus.onClicked.addListener(async (info) => {
     if (info.menuItemId !== 'open-markdown-reader') return;
     const url = info.linkUrl;
-    if (!url || !isMarkdownLink(url)) {
+    if (!url || !isMarkdownLink(url, (await readGeneralFlags()).renderTxt)) {
       await browser.action.setBadgeText({ text: '!' });
       await browser.action.setTitle({ title: 'Markdown Reader: this link is not a supported Markdown URL' });
       return;
@@ -35,7 +42,7 @@ export default defineBackground(() => {
     (message: { action?: string; url?: string; mode?: string; text?: string }, sender, sendResponse) => {
       void (async () => {
         if (message?.action === 'capture-markdown') {
-          if (!isValidCapture(message, sender, browser.runtime.id)) {
+          if (!isValidCapture(message, sender, browser.runtime.id, (await readGeneralFlags()).renderTxt)) {
             sendResponse({ ok: false });
             return;
           }

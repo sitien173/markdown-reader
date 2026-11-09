@@ -157,4 +157,27 @@ describe('sanitize', () => {
       expect(doc.querySelector('img')?.hasAttribute('src')).toBe(false);
     }
   });
+
+  it('keeps ins, caption, colspan, and rowspan', () => {
+    const doc = new DOMParser().parseFromString(
+      sanitize('<p><ins>added</ins></p><table><caption>Cap</caption><tr><td colspan="2" rowspan="3">x</td></tr></table>'),
+      'text/html',
+    );
+    expect(doc.querySelector('ins')?.textContent).toBe('added');
+    expect(doc.querySelector('caption')?.textContent).toBe('Cap');
+    expect(doc.querySelector('td')?.getAttribute('colspan')).toBe('2');
+    expect(doc.querySelector('td')?.getAttribute('rowspan')).toBe('3');
+  });
+
+  it('still removes event handlers, disallowed style, and javascript: hrefs next to ins', () => {
+    const html = sanitize(
+      '<ins onerror="alert(1)" onclick="alert(2)" style="position:fixed;background:url(x)">a</ins><ins><a href="javascript:alert(3)">b</a></ins>',
+    );
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const [first] = [...doc.querySelectorAll('ins')];
+    expect(first?.hasAttribute('onerror')).toBe(false);
+    expect(first?.hasAttribute('onclick')).toBe(false);
+    expect(first?.hasAttribute('style')).toBe(false);
+    expect(doc.querySelector('a')?.hasAttribute('href')).toBe(false);
+  });
 });

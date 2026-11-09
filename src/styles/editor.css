@@ -53,6 +53,18 @@
     --cm-code: #ff9e80;
   }
 }
+@media screen {
+  :root[data-theme="light"] .editor-host {
+    --cm-accent: #0066cc;
+    --cm-subtle: #636366;
+    --cm-code: #a3290c;
+  }
+  :root[data-theme="dark"] .editor-host {
+    --cm-accent: #6cb4ff;
+    --cm-subtle: #aeaeb2;
+    --cm-code: #ff9e80;
+  }
+}
 @media print {
   .editor-host {
     --cm-accent: #0066cc;

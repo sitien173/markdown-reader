@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { buildStandaloneHtml, downloadHtml, printDocument, prepareExportContent, themeExportDiagrams } from '../../src/export/export';
-import { EXPORT_CSS } from '../../src/export/export-styles';
+import { EXPORT_CSS, EXPORT_TOKENS } from '../../src/export/export-styles';
 import { readFileSync } from 'node:fs';
+import type { Appearance } from '../../src/lib/appearance';
+import { defaultSettings } from '../../src/lib/settings';
 
 const mermaidMock = vi.hoisted(() => ({ initialize: vi.fn(), render: vi.fn() }));
 vi.mock('mermaid', () => ({ default: mermaidMock }));
@@ -20,7 +22,15 @@ function rootTokens(css: string, atRule?: string): Record<string, string> {
     scope = css.slice(start);
   }
   const block = /:root\s*\{([^}]*)\}/.exec(scope)?.[1] ?? '';
-  return Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]));
+  return Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1] ?? '', (m[2] ?? '').trim()]));
+}
+
+// Declarations of the `:root[data-theme='<theme>']` rule.
+function forcedTokens(css: string, theme: 'light' | 'dark'): Record<string, string> {
+  const start = css.search(new RegExp(`:root\\[data-theme=['"]${theme}['"]\\]`));
+  if (start < 0) return {};
+  const block = /\{([^}]*)\}/.exec(css.slice(start))?.[1] ?? '';
+  return Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1] ?? '', (m[2] ?? '').trim()]));
 }
 
 describe('export module', () => {
@@ -255,6 +265,28 @@ describe('export module', () => {
     expect(rootTokens(globalsCss, '@media print')['--background']).toBe(rootTokens(globalsCss)['--background']);
   });
 
+  it('keeps the forced theme blocks identical to the light and dark tokens in globals.css and export CSS', () => {
+    const light = rootTokens(globalsCss);
+    const dark = rootTokens(globalsCss, '@media (prefers-color-scheme: dark) {');
+    for (const [css, label] of [
+      [globalsCss, 'globals.css'],
+      [EXPORT_CSS, 'export CSS'],
+    ] as const) {
+      for (const [theme, expected] of [
+        ['light', EXPORT_TOKENS.light],
+        ['dark', EXPORT_TOKENS.dark],
+      ] as const) {
+        const forced = forcedTokens(css, theme);
+        expect(Object.keys(forced).length, `${label} ${theme} block`).toBeGreaterThan(5);
+        for (const [name, value] of Object.entries(expected)) expect(forced[name], `${label} ${theme} ${name}`).toBe(value);
+      }
+    }
+    for (const [name, value] of Object.entries(EXPORT_TOKENS.light)) expect(light[name]).toBe(value);
+    for (const [name, value] of Object.entries(EXPORT_TOKENS.dark)) expect(dark[name]).toBe(value);
+    // Forced themes apply on screen only, so print stays light.
+    expect(EXPORT_CSS).toMatch(/@media screen \{\s*:root\[data-theme='dark'\]/);
+  });
+
   it('exports each diagram in a light and a dark copy with disjoint SVG ids', async () => {
     mermaidMock.render.mockImplementation(async (id: string) => ({
       svg: `<svg id="${id}"><defs><marker id="${id}_arrow"></marker></defs><title>${mermaidMock.initialize.mock.calls.at(-1)![0].themeVariables.background}</title></svg>`,
@@ -270,5 +302,68 @@ describe('export module', () => {
     expect(doc.querySelector('.md-diagram--light title')?.textContent).not.toBe(doc.querySelector('.md-diagram--dark title')?.textContent);
     expect(html).not.toContain('<script');
     expect(html).not.toContain('id="live"');
+  });
+});
+
+describe('Appearance in the standalone export', () => {
+  const appearance = (patch: Partial<Appearance>): Appearance => ({ ...defaultSettings.appearance, ...patch });
+  const build = (patch: Partial<Appearance>) => buildStandaloneHtml({ title: 'T', contentHtml: '<p>x</p>', appearance: appearance(patch) });
+  const root = (html: string) => /<html[^>]*>/.exec(html)?.[0] ?? '';
+
+  it('carries every Appearance value on the root and keeps the defaults when none is passed', () => {
+    const html = build({
+      theme: 'dark',
+      codeThemeLight: 'dark',
+      codeThemeDark: 'light',
+      textSize: 6,
+      font: 'serif',
+      wrapCode: true,
+      wideTables: true,
+      centered: false,
+      zen: true,
+      customMaxWidth: true,
+      maxWidthPx: 1400,
+    });
+    const tag = root(html);
+    for (const part of [
+      'data-theme="dark"',
+      'data-code-light="dark"',
+      'data-code-dark="light"',
+      'data-zen="true"',
+      '--md-scale:1.25',
+      '--md-max-width:1400px',
+    ]) {
+      expect(tag).toContain(part);
+    }
+    expect(tag).toContain('--md-font:ui-serif');
+    expect(tag).toMatch(/class="md-wrap-code md-wide-tables"/);
+
+    const plain = root(buildStandaloneHtml({ title: 'T', contentHtml: '<p>x</p>' }));
+    expect(plain).not.toContain('data-theme');
+    expect(plain).toContain('class="md-centered"');
+    expect(plain).toContain('data-zen="false"');
+    expect(plain).not.toContain('--md-font');
+    expect(plain).not.toContain('--md-max-width');
+  });
+
+  it('copies enabled custom CSS after the export styles, and drops it when off, empty, or rejected', () => {
+    const css = '.md-content h1 { color: red; }';
+    const html = build({ customCssEnabled: true, customCss: css });
+    expect(html).toContain(css);
+    expect(html.indexOf(css)).toBeGreaterThan(html.indexOf('</style>'));
+    expect(build({ customCssEnabled: false, customCss: css })).not.toContain(css);
+    expect(build({ customCssEnabled: true, customCss: '  ' })).not.toContain('id="custom-css"');
+    const rejected = 'p { background: url(https://example.test/x.png); }';
+    expect(build({ customCssEnabled: true, customCss: rejected })).not.toContain('example.test');
+  });
+
+  it('cannot be closed early by custom CSS text', () => {
+    const html = build({ customCssEnabled: true, customCss: '/* </style><script>alert(1)</script> */ p { color: red; }' });
+    expect(html).not.toContain('<script>');
+    expect(html.match(/<\/style>/g)).toHaveLength(2);
+  });
+
+  it('keeps the export tokens, and print light, when the theme is forced dark', () => {
+    expect(EXPORT_CSS).toMatch(/@media print\s*\{\s*:root\s*\{\s*color-scheme: light;/);
   });
 });

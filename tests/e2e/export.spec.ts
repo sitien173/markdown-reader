@@ -35,7 +35,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.locator(`.md-content img[src="${origin}/remote.png"]`).first()).toBeVisible();
 
       // Open Export menu and trigger download
-      const exportButton = page.getByRole('button', { name: 'Export' });
+      const exportButton = page.getByRole('button', { name: 'Menu' });
       await exportButton.click();
       const downloadPromise = page.waitForEvent('download');
       await page.getByRole('menuitem', { name: 'Export HTML' }).click();
@@ -95,7 +95,7 @@ test('exported HTML switches theme under colorScheme emulation and keeps SVG ids
   try {
     await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/doc.md`)}`);
     await expect(page.locator('.md-content .md-diagram svg')).toBeVisible({ timeout: 20000 });
-    await page.getByRole('button', { name: 'Export options' }).click();
+    await page.getByRole('button', { name: 'Menu' }).click();
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('menuitem', { name: 'Export HTML' }).click();
     const exportedHtml = await readFile((await (await downloadPromise).path())!, 'utf8');
@@ -149,9 +149,11 @@ test('Export is disabled in Edit mode', async ({ page, extensionId }) => {
   try {
     await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/doc.md`)}`);
     await expect(page.locator('.md-content h1')).toHaveText('Editable doc');
-    await page.getByRole('radio', { name: 'Edit', exact: true }).click();
-    const exportButton = page.getByRole('button', { name: 'Export' });
-    await expect(exportButton).toBeDisabled();
+    await page.keyboard.press('Control+k');
+    await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('Edit mode');
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Export HTML' })).toBeDisabled();
   } finally {
     await close();
   }
@@ -175,7 +177,7 @@ test('Print calls window.print() and a print stylesheet hides reader chrome', as
       };
     });
 
-    const exportButton = page.getByRole('button', { name: 'Export' });
+    const exportButton = page.getByRole('button', { name: 'Menu' });
     await exportButton.click();
     await page.getByRole('menuitem', { name: 'Print' }).click();
 
@@ -185,7 +187,10 @@ test('Print calls window.print() and a print stylesheet hides reader chrome', as
     // Emulate print media and assert reader chrome is hidden
     await page.emulateMedia({ media: 'print' });
 
-    const barDisplay = await page.locator('[data-slot="reader-bar"]').evaluate((el) => getComputedStyle(el).display);
+    const barDisplay = await page
+      .locator('.reader-float')
+      .first()
+      .evaluate((el) => getComputedStyle(el).display);
     expect(barDisplay).toBe('none');
 
     const tocDisplay = await page.locator('[data-slot="reader-toc"]').evaluate((el) => getComputedStyle(el).display);
@@ -193,6 +198,74 @@ test('Print calls window.print() and a print stylesheet hides reader chrome', as
 
     const markdownOverflow = await page.locator('.md-content').evaluate((el) => getComputedStyle(el).overflow);
     expect(markdownOverflow).toBe('visible');
+  } finally {
+    await close();
+  }
+});
+
+test('an export keeps Zen off, a custom width, and custom CSS, and loads with zero network requests', async ({
+  page,
+  context,
+  extensionId,
+}) => {
+  const { origin, close } = await startFixtureServer((_req, res) => {
+    res.setHeader('content-type', 'text/markdown; charset=utf-8');
+    res.end('# Styled export\n\nBody text.\n\n```js\nconst answer = 42;\n```\n');
+  });
+  try {
+    await page.setViewportSize({ width: 1600, height: 800 });
+    await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/styled.md`)}`);
+    await expect(page.locator('.md-content h1')).toHaveText('Styled export', { timeout: 20000 });
+    await page.evaluate(() =>
+      (globalThis as unknown as { chrome: { storage: { local: { set(items: object): Promise<void> } } } }).chrome.storage.local.set({
+        'settings:v1': {
+          version: 1,
+          appearance: {
+            zen: false,
+            theme: 'dark',
+            codeThemeDark: 'light',
+            textSize: 6,
+            font: 'serif',
+            wrapCode: true,
+            centered: false,
+            customMaxWidth: true,
+            maxWidthPx: 700,
+            customCssEnabled: true,
+            customCss: '.md-content h1 { color: rgb(1, 2, 3); }',
+          },
+        },
+      }),
+    );
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.getByRole('button', { name: 'Menu' }).click();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Export HTML' }).click();
+    const exportedHtml = await readFile((await (await downloadPromise).path())!, 'utf8');
+
+    const fresh = await context.newPage();
+    await fresh.setViewportSize({ width: 1600, height: 800 });
+    const requests: string[] = [];
+    fresh.on('request', (req) => requests.push(req.url()));
+    await fresh.route('**/*', (route) => route.abort());
+    await fresh.emulateMedia({ colorScheme: 'light' });
+    await fresh.setContent(exportedHtml, { waitUntil: 'load' });
+
+    const root = fresh.locator('html');
+    await expect(root).toHaveAttribute('data-zen', 'false');
+    await expect(root).toHaveAttribute('data-theme', 'dark');
+    await expect(root).toHaveAttribute('data-code-dark', 'light');
+    expect(await fresh.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(28, 28, 30)');
+    expect(await fresh.locator('.md-content').evaluate((el) => el.getBoundingClientRect().width)).toBe(700);
+    expect(await fresh.locator('.md-content').evaluate((el) => el.getBoundingClientRect().left)).toBeLessThan(100);
+    expect(await fresh.locator('.md-content').evaluate((el) => getComputedStyle(el).fontSize)).toBe('20px');
+    expect(await fresh.locator('.md-content h1').evaluate((el) => getComputedStyle(el).color)).toBe('rgb(1, 2, 3)');
+    expect(await fresh.locator('.md-content p').evaluate((el) => getComputedStyle(el).fontFamily)).toContain('Georgia');
+    expect(requests.filter((url) => !url.startsWith('about:') && !url.startsWith('data:'))).toEqual([]);
+
+    // Print stays light whatever the stored theme.
+    await fresh.emulateMedia({ media: 'print' });
+    expect(await fresh.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(255, 255, 255)');
+    await fresh.close();
   } finally {
     await close();
   }

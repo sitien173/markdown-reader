@@ -21,7 +21,12 @@ export function mermaidThemeVariables(read: (token: string) => string, dark: boo
 function lightThemeVariables(): ThemeVariables {
   return mermaidThemeVariables((token) => EXPORT_TOKENS.light[token as keyof typeof EXPORT_TOKENS.light] ?? '', false);
 }
-const isDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+// A forced theme on the root wins; Auto leaves data-theme unset, so the system scheme decides.
+const isDark = () => {
+  const forced = document.documentElement.getAttribute('data-theme');
+  if (forced === 'light' || forced === 'dark') return forced === 'dark';
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+};
 function currentThemeVariables(): ThemeVariables {
   const style = getComputedStyle(document.documentElement);
   return mermaidThemeVariables((token) => style.getPropertyValue(token), isDark());

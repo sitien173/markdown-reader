@@ -18,9 +18,11 @@ Open a Markdown file from your computer, a folder full of notes, or any web addr
 
 Edit as you read. Split view shows your Markdown next to a live preview, so changes appear as you type. Save your changes back to the file on your computer, or keep a draft that is kept safely in your browser until you save it. If a file changes on disk, the reader can show the latest version. Open a whole folder to browse its Markdown files in a sidebar tree.
 
-Work from the keyboard. A command palette (Ctrl+K, or Cmd+K on macOS) lists every action, and shortcuts cover opening a file, saving, printing, and toggling the sidebar. The reader follows your system's light or dark setting, and its short transitions are turned off when your system asks for reduced motion.
+Work from the keyboard. A command palette (Ctrl+K, or Cmd+K on macOS) lists every action, and shortcuts cover opening a file, saving, printing, and toggling the sidebar. The theme follows the system setting by default, or a chosen Light or Dark theme in the reader. Its short transitions are turned off when your system asks for reduced motion.
 
 Share or keep a finished page. Export a document as a single HTML file that opens anywhere with no internet connection and looks the same. Print a document, or save it as a PDF from the print dialog, with the reader controls left out.
+
+Choose how it looks and behaves in one settings panel, available from the toolbar popup, the extension's options page, and a dialog inside the reader. General settings cover automatic redirect, outline collapsing, an option to also render plain .txt files as Markdown, auto-refresh with an interval, and charset compatibility. Appearance settings cover text size, font, theme, code themes, wrapping, table width, Zen mode, column width, and custom CSS. Plugin switches turn each Markdown feature on or off.
 
 To get started, click the Markdown Reader toolbar icon and choose Open viewer, or right-click a link to a Markdown file and choose Open in Markdown Reader. To open a file on your computer, use Open file in the reader or drag the file onto the page. To read Markdown files stored on your computer by their address, turn on "Allow access to file URLs" in the extension's details page at chrome://extensions. Optional.
 

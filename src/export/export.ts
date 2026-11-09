@@ -2,6 +2,9 @@
 import createDOMPurify from 'dompurify';
 import { EXPORT_CSS, EXPORT_TOKENS } from './export-styles';
 import { mermaidThemeVariables, renderDiagramSvg } from '../render/diagram';
+import { type Appearance, appearanceRootState } from '../lib/appearance';
+import { validateCustomCss } from '../lib/custom-css';
+import { defaultSettings } from '../lib/settings';
 
 const purify = createDOMPurify(window);
 
@@ -165,7 +168,28 @@ export async function prepareExportContent(contentHtml: string): Promise<string>
   return container.innerHTML;
 }
 
-export function buildStandaloneHtml(options: { title: string; contentHtml: string }): string {
+// The root carries every Appearance value as attributes, classes, and custom properties that the shared Markdown rules read.
+function rootAttributes(appearance: Appearance): string {
+  const { attributes, properties, classes } = appearanceRootState(appearance);
+  const all: Record<string, string> = { ...attributes, 'data-zen': String(appearance.zen) };
+  if (classes.length) all.class = classes.join(' ');
+  const style = Object.entries(properties)
+    .map(([name, value]) => `${name}:${value}`)
+    .join(';');
+  if (style) all.style = style;
+  return Object.entries(all)
+    .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
+    .join('');
+}
+
+// Custom CSS is checked again here, because the stored value may not have gone through the Appearance tab. `<` is written as a CSS escape so no text can close the style element.
+function customCssBlock(appearance: Appearance): string {
+  if (!appearance.customCssEnabled || !appearance.customCss.trim() || !validateCustomCss(appearance.customCss).ok) return '';
+  return `\n<style id="custom-css">\n${appearance.customCss.replace(/</g, '\\3c ')}\n</style>`;
+}
+
+export function buildStandaloneHtml(options: { title: string; contentHtml: string; appearance?: Appearance }): string {
+  const appearance = options.appearance ?? defaultSettings.appearance;
   const title = escapeHtml(options.title || 'Document');
   const sanitizedContent = purify.sanitize(options.contentHtml, {
     USE_PROFILES: { html: true, svg: true },
@@ -178,7 +202,7 @@ export function buildStandaloneHtml(options: { title: string; contentHtml: strin
     bodyContent = container.innerHTML;
   }
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en"${rootAttributes(appearance)}>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -186,7 +210,7 @@ export function buildStandaloneHtml(options: { title: string; contentHtml: strin
 <style>
 ${EXPORT_CSS}
 ${KATEX_CSS}
-</style>
+</style>${customCssBlock(appearance)}
 </head>
 <body>
 <main class="md-content">
@@ -224,9 +248,9 @@ export async function themeExportDiagrams(contentHtml: string): Promise<string> 
   return container.innerHTML;
 }
 
-export function downloadHtml(title: string, contentHtml: string): Promise<void> | void {
+export function downloadHtml(title: string, contentHtml: string, appearance?: Appearance): Promise<void> | void {
   const triggerDownload = (finalContent: string) => {
-    const html = buildStandaloneHtml({ title, contentHtml: finalContent });
+    const html = buildStandaloneHtml({ title, contentHtml: finalContent, appearance });
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

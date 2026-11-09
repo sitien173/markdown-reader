@@ -18,6 +18,7 @@ export default defineConfig({
     name: 'Markdown Reader',
     permissions: ['storage', 'contextMenus', 'tabs'],
     host_permissions: ['<all_urls>'],
+    options_ui: { page: 'options.html', open_in_tab: true },
     icons: {
       16: 'icons/icon-16.png',
       32: 'icons/icon-32.png',

@@ -39,7 +39,7 @@ const declarations = (tokens: Record<string, string>, indent: string) =>
     .map(([name, value]) => `${indent}${name}: ${value};`)
     .join('\n');
 
-// Standalone export CSS: both color schemes selected by prefers-color-scheme, print forced light, plus the shared Markdown rules.
+// Standalone export CSS: both color schemes selected by prefers-color-scheme unless data-theme forces one, print forced light, plus the shared Markdown rules.
 // Fonts are system stacks only; the exported file loads nothing remote.
 export const EXPORT_CSS = `:root {
   color-scheme: light dark;
@@ -53,11 +53,27 @@ ${declarations(LIGHT, '  ')}
 ${declarations(DARK, '    ')}
   }
 }
+@media screen {
+  :root[data-theme='light'] {
+    color-scheme: light;
+${declarations(LIGHT, '    ')}
+  }
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+${declarations(DARK, '    ')}
+  }
+}
 @media print {
   :root {
     color-scheme: light;
 ${declarations(LIGHT, '    ')}
   }
+}
+/* Appearance defaults; the export root overrides them inline with the stored values. */
+:root {
+  --md-scale: 1;
+  --md-font: var(--font-body);
+  --md-max-width: 56rem;
 }
 body {
   margin: 0;
@@ -71,10 +87,18 @@ ${markdownCss}
   display: none;
 }
 @media screen and (prefers-color-scheme: dark) {
-  .md-diagram--light {
+  :root:not([data-theme='light']) .md-diagram--light {
     display: none;
   }
-  .md-diagram--dark {
+  :root:not([data-theme='light']) .md-diagram--dark {
+    display: block;
+  }
+}
+@media screen {
+  :root[data-theme='dark'] .md-diagram--light {
+    display: none;
+  }
+  :root[data-theme='dark'] .md-diagram--dark {
     display: block;
   }
 }

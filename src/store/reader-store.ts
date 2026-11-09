@@ -3,6 +3,7 @@ import { createStore, type StoreApi, useStore } from 'zustand';
 import type { Heading } from '../render/pipeline';
 import type { DirectorySource, TreeNode } from '../source/directory';
 import type { RecentItem } from './recent';
+import { useSettingsStore } from './settings-store';
 
 export type Mode = 'read' | 'edit' | 'split';
 export type SidebarTab = 'contents' | 'files';
@@ -28,6 +29,7 @@ export interface ReaderState {
   text: string | null;
   mountText: string;
   loadId: number;
+  sourceId: string;
   directorySource: DirectorySource | null;
   treeNodes: TreeNode[];
 }
@@ -48,7 +50,8 @@ function initialState(): ReaderState {
     recents: [],
     sidebarOpen: true,
     sidebarTab: 'contents',
-    focusMode: false,
+    // Zen mode: the stored Appearance value is the start state. Leaving focus mode later changes this session only.
+    focusMode: useSettingsStore.getState().settings.appearance.zen,
     error: '',
     externalChange: false,
     conflict: false,
@@ -59,6 +62,7 @@ function initialState(): ReaderState {
     text: null,
     mountText: '',
     loadId: 0,
+    sourceId: '',
     directorySource: null,
     treeNodes: [],
   };

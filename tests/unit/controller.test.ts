@@ -210,6 +210,38 @@ describe('controller save path', () => {
   });
 });
 
+describe('controller dirty-draft refresh paths', () => {
+  it('keeps a dirty draft and shows the banner when the watched folder file changes', async () => {
+    c.edit('my draft');
+    ctl.stamps['a.md'] = 150;
+    ctl.files['a.md'] = 'changed on disk';
+    ctl.events?.onChange?.();
+    await flush();
+    expect(c.getDraft()).toBe('my draft');
+    expect(get().text).toBe('A text');
+    expect(get().externalChange).toBe(true);
+  });
+
+  it('reloads a clean document when the watched folder file changes', async () => {
+    ctl.stamps['a.md'] = 150;
+    ctl.files['a.md'] = 'changed on disk';
+    ctl.events?.onChange?.();
+    await flush();
+    expect(get().text).toBe('changed on disk');
+    expect(get().externalChange).toBe(false);
+  });
+
+  it('stops the watcher when the controller is disposed', async () => {
+    const unwatch = vi.fn();
+    const dir = get().directorySource as unknown as { watch: (events: unknown) => () => void };
+    dir.watch = () => unwatch;
+    const stop = c.mount();
+    await c.selectTreeFile('b.md');
+    stop();
+    expect(unwatch).toHaveBeenCalled();
+  });
+});
+
 function fakeFileHandle(name: string, initial: string) {
   let text = initial;
   let modified = 1;

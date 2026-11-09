@@ -1,4 +1,4 @@
-export type WatchEvents = { onChange: () => void; onDeleted: () => void };
+export type WatchEvents = { onChange: () => void; onDeleted: () => void; intervalMs?: number };
 export type PollOptions = WatchEvents & { stamp: () => Promise<string | number | null>; intervalMs: number };
 
 // Polls a stamp and reports each move once. A null stamp means the file is missing. Returns an unsubscribe.
@@ -44,7 +44,7 @@ export function watchFileHandle(handle: FileSystemFileHandle, events: WatchEvent
         stamp: async () => (await handle.getFile()).lastModified,
         onChange: events.onChange,
         onDeleted: events.onDeleted,
-        intervalMs: 1000,
+        intervalMs: events.intervalMs ?? 1000,
       });
     }
   };
@@ -70,6 +70,7 @@ export function watchFileHandle(handle: FileSystemFileHandle, events: WatchEvent
 }
 
 export type DirectoryWatchEvents = {
+  intervalMs?: number;
   onTreeChange?: () => void;
   onChange?: () => void;
   onDeleted?: () => void;
@@ -158,7 +159,7 @@ export function watchDirectory(
         }
       }
       lastSnapshot = next;
-      if (!stopped) timer = setTimeout(tick, intervalMs);
+      if (!stopped) timer = setTimeout(tick, events.intervalMs ?? intervalMs);
     };
     void tick();
   };
@@ -210,6 +211,70 @@ export function watchFileUrl(url: string, events: WatchEvents): () => void {
     },
     onChange: events.onChange,
     onDeleted: events.onDeleted,
-    intervalMs: 1000,
+    intervalMs: events.intervalMs ?? 1000,
   });
+}
+
+const HTTP_MIN_INTERVAL_MS = 5000;
+const HTTP_BACKOFF_CAP_MS = 300_000;
+
+export function clampIntervalSec(sec: number): number {
+  return Number.isFinite(sec) ? Math.min(600, Math.max(0.5, sec)) : 1;
+}
+export const fileIntervalMs = (sec: number) => clampIntervalSec(sec) * 1000;
+export const httpIntervalMs = (sec: number) => Math.max(fileIntervalMs(sec), HTTP_MIN_INTERVAL_MS);
+
+/**
+ * Polls an http(s) document with conditional requests. A 304 keeps the text; an error or non-2xx status keeps it too and doubles the delay up to a cap.
+ * Redirects are not followed with validators, so the conditional headers go only to the document's own URL. A redirecting URL is refetched without validators and compared by text.
+ */
+export function watchHttpUrl(url: string, events: WatchEvents): () => void {
+  const base = Math.max(events.intervalMs ?? HTTP_MIN_INTERVAL_MS, HTTP_MIN_INTERVAL_MS);
+  const cap = Math.max(base, HTTP_BACKOFF_CAP_MS);
+  let etag: string | undefined;
+  let lastModified: string | undefined;
+  let lastText: string | undefined;
+  let failures = 0;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let inflight: AbortController | undefined;
+  const tick = async () => {
+    inflight = new AbortController();
+    let changed = false;
+    try {
+      const headers: Record<string, string> = {};
+      if (etag) headers['If-None-Match'] = etag;
+      if (lastModified) headers['If-Modified-Since'] = lastModified;
+      let response = await fetch(url, {
+        redirect: 'manual',
+        signal: inflight.signal,
+        ...(Object.keys(headers).length ? { headers } : {}),
+      });
+      if (stopped) return;
+      const redirected = response.type === 'opaqueredirect';
+      if (redirected) response = await fetch(url, { redirect: 'follow', cache: 'no-cache', signal: inflight.signal });
+      if (stopped) return;
+      if (response.status !== 304) {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        if (stopped) return;
+        etag = redirected ? undefined : (response.headers.get('etag') ?? undefined);
+        lastModified = redirected ? undefined : (response.headers.get('last-modified') ?? undefined);
+        changed = lastText !== undefined && text !== lastText;
+        lastText = text;
+      }
+      failures = 0;
+    } catch {
+      if (stopped) return;
+      failures += 1;
+    }
+    if (changed) events.onChange();
+    if (!stopped) timer = setTimeout(tick, Math.min(base * 2 ** failures, cap));
+  };
+  void tick();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+    inflight?.abort();
+  };
 }

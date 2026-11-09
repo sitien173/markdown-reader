@@ -1,5 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
-import { createParseState, planBlocks, planPrefix, type Heading } from '../render/pipeline';
+import { useSettingsStore } from '../store/settings-store';
+import { createParseState, planBlocks, planPrefix, type Heading, type PluginConfig } from '../render/pipeline';
+import { buildToc, type TocNode } from '../toc/toc';
 import { enhance } from '../render/enhance';
 import { rerenderDiagrams } from '../render/diagram';
 import type { DirectorySource } from '../source/directory';
@@ -19,6 +21,27 @@ const PREFIX_TRIGGER_CHARS = 64 * 1024;
 const PREFIX_CHARS = 24 * 1024;
 const PREFIX_KEY = 'prefix';
 
+// Fills each [[TOC]] placeholder with a nested list of links to the headings; the parser leaves it empty so blocks stay independent.
+function fillToc(root: HTMLElement, headings: Heading[]) {
+  const placeholders = root.querySelectorAll('[data-toc-placeholder]');
+  if (placeholders.length === 0) return;
+  const nodes = buildToc(headings);
+  const list = (items: TocNode[]): HTMLUListElement => {
+    const ul = document.createElement('ul');
+    for (const item of items) {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = `#${item.id}`;
+      a.textContent = item.text;
+      li.append(a);
+      if (item.children.length > 0) li.append(list(item.children));
+      ul.append(li);
+    }
+    return ul;
+  };
+  for (const placeholder of placeholders) placeholder.replaceChildren(...(nodes.length > 0 ? [list(nodes)] : []));
+}
+
 export const MarkdownView = forwardRef<
   MarkdownViewHandle,
   {
@@ -27,8 +50,10 @@ export const MarkdownView = forwardRef<
     onHeadings?: (headings: Heading[]) => void;
     directorySource?: DirectorySource | null;
     docPath?: string | null;
+    plugins?: PluginConfig;
+    pluginKey?: string;
   }
->(function MarkdownView({ text, baseUrl, onHeadings, directorySource, docPath }, handle) {
+>(function MarkdownView({ text, baseUrl, onHeadings, directorySource, docPath, plugins, pluginKey = '' }, handle) {
   const container = useRef<HTMLDivElement>(null);
   const baseRef = useRef(baseUrl);
   baseRef.current = baseUrl;
@@ -42,6 +67,11 @@ export const MarkdownView = forwardRef<
   const cachedSourceRef = useRef<DirectorySource | null | undefined>(directorySource);
   const docPathRef = useRef(docPath);
   docPathRef.current = docPath;
+  const pluginsRef = useRef(plugins);
+  pluginsRef.current = plugins;
+  const pluginKeyRef = useRef(pluginKey);
+  pluginKeyRef.current = pluginKey;
+  const cachedPluginKey = useRef(pluginKey);
   const headingsRef = useRef(onHeadings);
   headingsRef.current = onHeadings;
   const lastHeadings = useRef('');
@@ -85,9 +115,16 @@ export const MarkdownView = forwardRef<
       if (!el) return;
       const isFolder = Boolean(dirRef.current);
       const currentDocId = dirRef.current ? `${dirRef.current.identity}:${docPathRef.current ?? ''}` : baseRef.current;
-      if (cachedSourceRef.current !== dirRef.current || cachedDocId.current !== currentDocId) {
+      if (
+        cachedSourceRef.current !== dirRef.current ||
+        cachedDocId.current !== currentDocId ||
+        cachedPluginKey.current !== pluginKeyRef.current
+      ) {
         cachedSourceRef.current = dirRef.current;
         cachedDocId.current = currentDocId;
+        // A plugin change replaces every block and drops the incremental parse, which was built with the old parser.
+        if (cachedPluginKey.current !== pluginKeyRef.current) parseState.current = createParseState();
+        cachedPluginKey.current = pluginKeyRef.current;
         cache.current.clear();
         mounted.current = [];
         el.replaceChildren();
@@ -172,7 +209,7 @@ export const MarkdownView = forwardRef<
         chunkTimer.current = 0;
 
         const activeCache = isFolder ? new Map<string, string>() : cache.current;
-        const plan = planBlocks(source, baseRef.current, activeCache, parseState.current);
+        const plan = planBlocks(source, baseRef.current, activeCache, parseState.current, pluginsRef.current);
         const keys = plan.keys;
 
         // Patch blocks: for folder documents, disable incremental reuse so no stale blob URLs are retained.
@@ -211,6 +248,7 @@ export const MarkdownView = forwardRef<
             const next = mountRange(plan, end, from, CHUNK_CHARS, null, gen, imgController);
             mounted.current.push(...next.inserted);
             for (const block of next.inserted) trackEnhance(block.el);
+            fillToc(el, plan.headings);
             if (next.next < end) {
               continueMount(next.next);
             } else {
@@ -228,6 +266,7 @@ export const MarkdownView = forwardRef<
         }
         if (scroller) scroller.scrollTop = scrollTop;
         for (const block of first.inserted) trackEnhance(block.el);
+        fillToc(el, plan.headings);
         performance.mark('md-render-end');
         performance.measure('md-render', 'md-render-start', 'md-render-end');
         requestAnimationFrame(() => performance.mark('md-first-visible'));
@@ -236,7 +275,9 @@ export const MarkdownView = forwardRef<
 
       // A large document opened fresh shows its first part before the full parse. The full render then replaces it, and it is skipped if the source changed.
       const head =
-        mounted.current.length === 0 && value.length > PREFIX_TRIGGER_CHARS ? planPrefix(value, baseRef.current, PREFIX_CHARS) : null;
+        mounted.current.length === 0 && value.length > PREFIX_TRIGGER_CHARS
+          ? planPrefix(value, baseRef.current, PREFIX_CHARS, pluginsRef.current)
+          : null;
       if (!head) {
         renderFull(value);
         return;
@@ -254,6 +295,7 @@ export const MarkdownView = forwardRef<
       el.replaceChildren();
       const shown = mountRange({ keys: [PREFIX_KEY], html: () => head.html }, 1, 0, Infinity, null, prefixGen, prefixImgController);
       mounted.current = shown.inserted;
+      fillToc(el, head.headings);
       mountedComplete.current = false;
       if (scroller) scroller.scrollTop = scrollTop;
       performance.mark('md-render-end');
@@ -324,13 +366,13 @@ export const MarkdownView = forwardRef<
       prevDirRef.current = directorySource;
     }
     paint(text);
-  }, [text, baseUrl, docPath, directorySource, paint]);
+  }, [text, baseUrl, docPath, directorySource, pluginKey, paint]);
 
-  // A system theme change redraws only the diagrams; Shiki and KaTeX switch by CSS alone.
+  // A theme change redraws only the diagrams; Shiki and KaTeX switch by CSS alone. Auto also follows the system scheme.
+  const theme = useSettingsStore((s) => s.settings.appearance.theme);
+  const seenTheme = useRef(theme);
   useEffect(() => {
-    const query = window.matchMedia?.('(prefers-color-scheme: dark)');
-    if (!query) return;
-    const onChange = () => {
+    const redraw = () => {
       const el = container.current;
       if (!el) return;
       const p = rerenderDiagrams(el, controller.current.signal);
@@ -339,9 +381,17 @@ export const MarkdownView = forwardRef<
         activeEnhancers.current.delete(p);
       });
     };
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
+    // The root data-theme is written in a layout effect of the shell, so it is current by the time this effect runs.
+    if (seenTheme.current !== theme) {
+      seenTheme.current = theme;
+      redraw();
+    }
+    if (theme !== 'auto') return;
+    const query = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!query) return;
+    query.addEventListener('change', redraw);
+    return () => query.removeEventListener('change', redraw);
+  }, [theme]);
 
   useEffect(() => {
     unmountedRef.current = false;

@@ -1,6 +1,17 @@
 import { readFile } from 'node:fs/promises';
 import os from 'node:os';
+import type { Page } from '@playwright/test';
 import { test, expect, startFixtureServer } from './fixtures';
+
+// Read mode has no mode switch, so a mode is reached through the Cmd+K palette command.
+async function runPaletteCommand(page: Page, name: string) {
+  await page.keyboard.press('Control+k');
+  const dialog = page.getByRole('dialog', { name: 'Command palette' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('combobox').fill(name);
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+}
 
 // Timing gates are load-tolerant: each gate uses the median of several runs, and this file runs serially (workers: 1).
 const median = (values: number[]) => {
@@ -104,6 +115,112 @@ test('S3: typing in Split on a 100 KB document updates the preview within 100 ms
   }
 });
 
+// Turns every plugin on through storage, the same key the popup writes.
+async function enableAllPlugins(page: import('@playwright/test').Page, extensionId: string) {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page.getByRole('tab', { name: 'Plugins' }).click();
+  const all = page.getByRole('switch', { name: 'All plugins', exact: true });
+  if (!(await all.isChecked())) await all.click();
+  await expect(all).toBeChecked();
+}
+
+test('S3 with all plugins on and a [[TOC]] document', async ({ context, page, extensionId }) => {
+  const markdown = await readFile('tests/fixtures/large-100kb-toc.md', 'utf8');
+  const { origin, close } = await startFixtureServer((_req, res) => {
+    res.setHeader('content-type', 'text/markdown; charset=utf-8');
+    res.end(markdown);
+  });
+  try {
+    await enableAllPlugins(page, extensionId);
+    const reader = await context.newPage();
+    await reader.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/large-100kb-toc.md`)}&mode=split`);
+    await expect(reader.locator('.md-content h1')).toHaveText('Large TOC fixture', { timeout: 30000 });
+    await expect(reader.locator('.md-content [data-toc-placeholder] a').first()).toBeVisible({ timeout: 30000 });
+    await reader.evaluate(() => {
+      const w = window as unknown as { __marks: number[]; __before: number };
+      w.__marks = [];
+      document.addEventListener(
+        'keydown',
+        () => {
+          w.__before = performance.now();
+        },
+        true,
+      );
+      new MutationObserver(() => w.__marks.push(performance.now())).observe(document.querySelector('.md-content') ?? document.body, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    });
+    await reader.locator('.cm-content').click();
+    await reader.keyboard.press('Control+End');
+    const latencies: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const before = await reader.evaluate(() => (window as unknown as { __marks: number[] }).__marks.length);
+      await reader.keyboard.type('k');
+      await reader.waitForFunction((count) => (window as unknown as { __marks: number[] }).__marks.length > count, before);
+      latencies.push(
+        await reader.evaluate((count) => {
+          const w = window as unknown as { __marks: number[]; __before: number };
+          return (w.__marks[count] ?? NaN) - w.__before;
+        }, before),
+      );
+    }
+    console.log(
+      `S3 all plugins and [[TOC]] keystroke to preview DOM update (ms): ${latencies.map((v) => v.toFixed(1)).join(', ')}; median ${median(latencies).toFixed(1)}; ${loadNote()}`,
+    );
+    expect(median(latencies)).toBeLessThan(100);
+  } finally {
+    await close();
+  }
+});
+
+test('S4 with all plugins on', async ({ context, page, extensionId }) => {
+  test.setTimeout(180000);
+  const { origin, close } = await startFixtureServer((_req, res) => {
+    res.setHeader('content-type', 'text/markdown; charset=utf-8');
+    res.end(benchmarkMarkdown);
+  });
+  const firstVisible: number[] = [];
+  try {
+    await enableAllPlugins(page, extensionId);
+    const reader = await context.newPage();
+    const url = `chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/benchmark.md`)}`;
+    for (let run = 0; run < 3; run++) {
+      await reader.goto(url);
+      await expect(reader.locator('.md-content h1')).toHaveText('Benchmark document', { timeout: 30000 });
+      await reader.waitForFunction(() => performance.getEntriesByName('md-render-complete').length > 0, undefined, { timeout: 60000 });
+      firstVisible.push(
+        await reader.evaluate(() => {
+          const start = performance.getEntriesByName('md-render-start').at(-1)?.startTime ?? NaN;
+          return (performance.getEntriesByName('md-first-visible')[0]?.startTime ?? NaN) - start;
+        }),
+      );
+    }
+    // Parser build time after a toggle change: the first render with a new plugin config pays for a new parser instance.
+    const toggle = page.getByRole('switch', { name: 'Mermaid', exact: true });
+    const endsBefore = await reader.evaluate(() => performance.getEntriesByName('md-render-end').length);
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await reader.waitForFunction((count) => performance.getEntriesByName('md-render-end').length > count, endsBefore, { timeout: 60000 });
+    const rebuild = await reader.evaluate(() => {
+      const build = performance.getEntriesByName('md-parser-build').at(-1)?.duration ?? NaN;
+      const end = performance.getEntriesByName('md-render-end').at(-1)?.startTime ?? NaN;
+      const begin = performance.getEntriesByName('md-render-start').at(-1)?.startTime ?? NaN;
+      return { parse: end - begin, build };
+    });
+    console.log(
+      `S4 all plugins first content visible (ms) per run: ${firstVisible.map((v) => v.toFixed(0)).join(', ')}; median ${median(firstVisible).toFixed(0)}`,
+    );
+    console.log(
+      `S4 parser build (md-parser-build) and first paint after a plugin toggle (ms): ${rebuild.build.toFixed(1)}, ${rebuild.parse.toFixed(0)}; ${loadNote()}`,
+    );
+  } finally {
+    await close();
+  }
+  expect(median(firstVisible)).toBeLessThan(500);
+});
+
 test('S8: a plain document triggers no request for the Mermaid, KaTeX, or Shiki chunks', async ({ page, extensionId }) => {
   const plain = await readFile('tests/fixtures/markdown/plain.md', 'utf8');
   const { origin, close } = await startFixtureServer((_req, res) => {
@@ -140,7 +257,7 @@ test('S9: a local document with math, code, and a diagram renders while all netw
     page.on('request', (request) => {
       if (!request.url().startsWith(`chrome-extension://${extensionId}/`)) networkRequests.push(request.url());
     });
-    await page.getByRole('radio', { name: 'Edit', exact: true }).click();
+    await runPaletteCommand(page, 'Edit mode');
     await expect(page.locator('.cm-editor')).toBeVisible();
     await expect(page.locator('.md-content')).toHaveCount(0);
     await page.getByRole('radio', { name: 'Read', exact: true }).click();

@@ -31,6 +31,10 @@ beforeEach(() => {
     print: vi.fn(),
     toggleSidebar: vi.fn(),
     toggleFocusMode: vi.fn(),
+    toggleRaw: vi.fn(),
+    toggleFullscreen: vi.fn(),
+    openSettings: vi.fn(),
+    openAbout: vi.fn(),
     openPalette: vi.fn(),
   };
   commands = createCommands(deps as unknown as CommandDeps);

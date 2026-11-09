@@ -18,8 +18,8 @@ async function openWithPicker(page: Page, text: string) {
     (window as unknown as PickerWindow).__handle = handle;
     (window as unknown as PickerWindow).showOpenFilePicker = async () => [handle];
   }, text);
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'File' }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Open file' }).click();
   await expect(page.locator('.md-content h1').first()).toBeVisible({ timeout: 20000 });
 }
 
@@ -80,14 +80,20 @@ test('scroll-spy marks the heading in view', async ({ page, extensionId }) => {
 test('focus mode hides toolbar and sidebar and Escape exits it', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/reader.html`);
   await openWithPicker(page, longDoc);
-  await page.getByRole('button', { name: 'Focus mode' }).click();
+  await page.keyboard.press('Control+k');
+  await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('Split mode');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-slot="reader-bar"]')).toBeVisible();
+  await page.keyboard.press('Control+k');
+  await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('Zen mode');
+  await page.keyboard.press('Enter');
   await expect(page.locator('main.reader')).toHaveAttribute('data-focus', 'true');
   await expect(page.locator('[data-slot="reader-bar"]')).toHaveCount(0);
   await expect(page.locator('[data-slot="reader-toc"]')).toBeHidden();
   await page.keyboard.press('Escape');
   await expect(page.locator('main.reader')).toHaveAttribute('data-focus', 'false');
   await expect(page.locator('[data-slot="reader-bar"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Focus mode' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Menu' })).toBeFocused();
 });
 
 test('drop overlay appears while a file is dragged over the window', async ({ page, extensionId }) => {
@@ -125,8 +131,8 @@ test('error banner and external-change banner coexist and dismissing the error k
       throw new Error('Picker failed');
     };
   });
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'File' }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Open file' }).click();
   const error = banners.getByRole('alert');
   await expect(error).toContainText('Picker failed');
   await expect(banners.getByRole('button', { name: 'Reload' })).toBeVisible();
@@ -151,13 +157,16 @@ test('a toast appears in the polite live region after save', async ({ page, exte
 test('Read, Edit, and Split form a radiogroup with arrow-key selection', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/reader.html`);
   await openWithPicker(page, longDoc);
+  await page.keyboard.press('Control+k');
+  await page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox').fill('Split mode');
+  await page.keyboard.press('Enter');
   const group = page.getByRole('radiogroup', { name: 'Reader mode' });
   const radios = group.getByRole('radio');
   await expect(radios).toHaveText(['Read', 'Edit', 'Split']);
   const read = group.getByRole('radio', { name: 'Read' });
   const edit = group.getByRole('radio', { name: 'Edit' });
   const split = group.getByRole('radio', { name: 'Split' });
-  await expect(read).toHaveAttribute('aria-checked', 'true');
+  await expect(split).toHaveAttribute('aria-checked', 'true');
   await expect(edit).toHaveAttribute('aria-checked', 'false');
   await read.focus();
   await page.keyboard.press('ArrowRight');

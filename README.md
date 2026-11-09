@@ -8,7 +8,16 @@ A Chrome extension (Manifest V3) that renders Markdown from local files, local f
 - Contents panel, split editor with live preview, read, edit, and split modes, and a focus mode.
 - Code highlighting, math, and diagrams. Export to one standalone HTML file, or print.
 - Command palette (Ctrl+K, or Cmd+K on macOS) and shortcuts: open file (`Mod+O`), save (`Mod+S`), print (`Mod+P`), toggle sidebar (`Mod+\`). `Mod` is Ctrl, or Cmd on macOS.
-- Light and dark appearance follow the system setting. Short enter and exit transitions are turned off when the system asks for reduced motion.
+- The theme follows the system setting by default, or a chosen Light or Dark theme in the reader. Short enter and exit transitions are turned off when the system asks for reduced motion.
+
+## Settings
+
+One settings panel appears in the toolbar popup, on the options page (`options_ui`, opens in a tab), and in a dialog inside the reader. Every setting is stored in `storage.local` under `settings:v1` and reaches open reader tabs without a reload. With no stored settings, the defaults apply.
+
+- **General:** Enable automatic redirect of Markdown pages, local file access state, outline collapsing, Render .txt as Markdown (off by default), auto-refresh for files and folders, optional auto-refresh for http and https documents with an interval from 0.5 to 600 seconds, charset compatibility, language, and Reset settings.
+- **Appearance:** text size, font, theme (Auto, Light, Dark), code theme for light and for dark, wrap code lines, wide tables, Zen mode, centered column, custom max width (500 to 3000 px), and custom CSS.
+- **Plugins:** an All plugins switch and one switch each for Linkify, Emoji, Superscript, Subscript, Mark, KaTeX, Mermaid, Abbreviation, Definition list, Footnote, Task list, Alert box, Typographer, Breaks, TOC, Insert, Front matter, and Multi-markdown table.
+- **About:** the name and version.
 
 ## Requirements
 

@@ -1,24 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { EditorPane } from '../../ui/editor-pane';
 import type { MarkdownViewHandle } from '../../ui/markdown-view';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { FolderIcon, ListIcon, PanelLeftIcon, SearchIcon } from 'lucide-react';
+import { Input } from '../../components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '../../components/ui/toggle-group';
+import { t, useT } from '../../i18n';
 import { SaveConflictDialog } from '../../ui/save-conflict-dialog';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
-import { createCommands } from '../../reader/commands';
+import { applyAppearance } from '../../lib/appearance';
+import { applyCustomCss } from '../../lib/custom-css';
+import { type Command, createCommands } from '../../reader/commands';
 import { createController, type ReaderController } from '../../reader/controller';
-import { createReaderStore, ReaderStoreContext, type ReaderStore, selectBanners, useReaderStore } from '../../store/reader-store';
+import {
+  createReaderStore,
+  ReaderStoreContext,
+  type ReaderStore,
+  type SidebarTab,
+  selectBanners,
+  useReaderStore,
+} from '../../store/reader-store';
 import { FileTree } from '../../ui/file-tree';
 import { RecentSection } from '../../ui/recent-section';
-import type { Heading } from '../../render/pipeline';
+import { type Heading, pluginKey } from '../../render/pipeline';
+import { useSettingsStore } from '../../store/settings-store';
 import { MarkdownView } from '../../ui/markdown-view';
 import { Toolbar } from '../../ui/toolbar';
+import { ReaderMenu } from '../../ui/reader-menu';
+import { AboutDialog } from '../../ui/about-dialog';
 import { scrollBehavior, TocPanel } from '../../ui/toc-panel';
 import { DropOverlay } from '../../ui/drop-overlay';
 import { OpenUrlDialog } from '../../ui/open-url-dialog';
 import { StatusBanner } from '../../ui/status-banner';
+import { SettingsDialog } from '../../ui/settings/settings-dialog';
 import { Welcome } from '../../ui/welcome';
 import { notifyToast, Toaster } from '../../components/ui/toast';
 import { bindShortcuts } from '../../reader/shortcuts';
@@ -39,33 +55,61 @@ export default function App() {
 
 type RunCommand = (id: string) => void;
 
+const FULLSCREEN_GUARD_MS = 300;
+
 function Reader({ controller }: { controller: ReaderController }) {
   const viewRef = useRef<MarkdownViewHandle | null>(null);
   // The shell subscribes only to what it renders itself; every panel below selects its own fields.
   const focusMode = useReaderStore((s) => s.focusMode);
   const sidebarOpen = useReaderStore((s) => s.sidebarOpen);
+  const mode = useReaderStore((s) => s.mode);
   const patch = controller.store.setState;
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   useEffect(() => controller.mount(), [controller]);
 
+  // A layout effect, so the root attributes are current before any passive effect (such as the diagram redraw) reads them.
+  const appearance = useSettingsStore((s) => s.settings.appearance);
+  useLayoutEffect(() => applyAppearance(document.documentElement, appearance), [appearance]);
+  // A stylesheet that fails validation is rejected whole and the previously adopted one stays.
+  const { customCssEnabled, customCss } = appearance;
+  useEffect(() => void applyCustomCss(document, customCssEnabled ? customCss : ''), [customCssEnabled, customCss]);
+  // Zen mode is the stored focus mode: a change to the stored value applies live, and Escape later leaves this session only.
+  useEffect(() => patch({ focusMode: appearance.zen }), [appearance.zen, patch]);
+
   useEffect(() => {
     if (!focusMode) return;
+    // Escape in browser fullscreen belongs to fullscreen. Chrome usually consumes it, or exits first and then delivers it, so a fullscreenchange opens a short guard.
+    let guardUntil = 0;
+    const onFullscreenChange = () => {
+      guardUntil = performance.now() + FULLSCREEN_GUARD_MS;
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (document.querySelector('[role="dialog"]:not([data-slot="toast"], [data-ending-style]), [role="menu"]:not([data-ending-style])'))
         return;
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined);
+        return;
+      }
+      if (performance.now() < guardUntil) return;
       patch({ focusMode: false });
     };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [focusMode, patch]);
 
-  // Leaving focus mode remounts the toolbar; return keyboard focus to the button that entered it.
+  // Leaving focus mode remounts the floating controls; return keyboard focus to the menu button.
   const wasFocusMode = useRef(false);
   useEffect(() => {
     if (wasFocusMode.current && !focusMode) {
-      document.querySelector<HTMLButtonElement>('[data-slot="reader-bar"] [aria-label="Focus mode"]')?.focus();
+      document.querySelector<HTMLButtonElement>(`[aria-label="${t('reader.menu')}"]`)?.focus();
     }
     wasFocusMode.current = focusMode;
   }, [focusMode]);
@@ -80,10 +124,12 @@ function Reader({ controller }: { controller: ReaderController }) {
       if (viewRef.current) {
         await viewRef.current.ready();
       }
-      const container = document.querySelector<HTMLElement>('[data-slot="markdown"]');
+      const container = document.querySelector<HTMLElement>('[data-slot="markdown"]')?.cloneNode(true) as HTMLElement | undefined;
+      // The Copy bars and heading permalinks are reader controls; the exported file has no script to run them.
+      for (const el of container?.querySelectorAll('.md-code-bar, .md-permalink') ?? []) el.remove();
       const contentHtml = container ? container.innerHTML : '';
       const title = (docPath ? docPath.split('/').pop() : null)?.replace(/\.md$/i, '') || headings[0]?.text || 'document';
-      await downloadHtml(title, contentHtml);
+      await downloadHtml(title, contentHtml, useSettingsStore.getState().settings.appearance);
       notifyToast('Exported HTML');
     }
     async function print() {
@@ -103,6 +149,17 @@ function Reader({ controller }: { controller: ReaderController }) {
       print: () => void print(),
       toggleSidebar: () => store.setState((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleFocusMode: () => store.setState((s) => ({ focusMode: !s.focusMode })),
+      toggleRaw: () => controller.setMode(store.getState().mode === 'read' ? 'edit' : 'read'),
+      toggleFullscreen: () => {
+        const refused = () => notifyToast(t('reader.fullscreenRefused'));
+        try {
+          void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(refused);
+        } catch {
+          refused();
+        }
+      },
+      openSettings: () => setSettingsOpen(true),
+      openAbout: () => setAboutOpen(true),
       openPalette: () => setPaletteOpen(true),
     });
   }, [controller]);
@@ -121,7 +178,8 @@ function Reader({ controller }: { controller: ReaderController }) {
         void controller.drop(e.dataTransfer.items[0]);
       }}
     >
-      {!focusMode && <Toolbar commands={commands} onMode={controller.setMode} />}
+      {!focusMode && mode !== 'read' && <Toolbar commands={commands} onMode={controller.setMode} />}
+      {!focusMode && <FloatingControls commands={commands} />}
       {focusMode && (
         <Button variant="secondary" size="sm" className="reader-focus-exit" onClick={() => patch({ focusMode: false })}>
           Exit focus mode
@@ -139,12 +197,34 @@ function Reader({ controller }: { controller: ReaderController }) {
         onRefreshRecents={controller.refreshRecents}
         onAnnouncement={controller.notify}
       />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
       <DropOverlay />
       <div className="reader-body">
         <Sidebar controller={controller} />
         <Content controller={controller} viewRef={viewRef} run={run} />
       </div>
     </main>
+  );
+}
+
+function FloatingControls({ commands }: { commands: Command[] }) {
+  const sidebarOpen = useReaderStore((s) => s.sidebarOpen);
+  const toggleSidebar = commands.find((c) => c.id === 'toggle-sidebar');
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="icon"
+        className="reader-float reader-float--start"
+        aria-label={toggleSidebar?.label}
+        aria-pressed={sidebarOpen}
+        onClick={() => toggleSidebar?.run()}
+      >
+        <PanelLeftIcon aria-hidden="true" />
+      </Button>
+      <ReaderMenu commands={commands} />
+    </>
   );
 }
 
@@ -190,32 +270,72 @@ function UrlDialog({ controller }: { controller: ReaderController }) {
 }
 
 function Sidebar({ controller }: { controller: ReaderController }) {
+  const t = useT();
   const sidebarOpen = useReaderStore((s) => s.sidebarOpen);
   const sidebarTab = useReaderStore((s) => s.sidebarTab);
+  const [searching, setSearching] = useState(false);
+  const [filter, setFilter] = useState('');
+  const filterRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (searching) filterRef.current?.focus();
+  }, [searching]);
+  const selectTab = (tab: SidebarTab) => {
+    controller.store.setState({ sidebarTab: tab });
+    setFilter('');
+  };
   return (
     <aside className="reader-toc" data-slot="reader-toc" inert={!sidebarOpen}>
-      <Tabs value={sidebarTab} onValueChange={(tab) => controller.store.setState({ sidebarTab: tab === 'files' ? 'files' : 'contents' })}>
-        <TabsList variant="line" activateOnFocus>
-          <TabsTrigger value="contents">Contents</TabsTrigger>
-          <TabsTrigger value="files">Files</TabsTrigger>
-        </TabsList>
-        <TabsContent value="contents">
-          <ContentsPanel />
-        </TabsContent>
-        <TabsContent value="files">
-          <FilesPanel controller={controller} />
-        </TabsContent>
-      </Tabs>
+      <div className="reader-toc-head">
+        <ToggleGroup
+          aria-label={t('reader.sidebarView')}
+          variant="outline"
+          spacing={0}
+          value={[sidebarTab]}
+          onValueChange={(next) => next[0] && selectTab(next[0] as SidebarTab)}
+        >
+          <ToggleGroupItem value="files" aria-label={t('reader.files')}>
+            <FolderIcon aria-hidden="true" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="contents" aria-label={t('reader.outline')}>
+            <ListIcon aria-hidden="true" />
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t('reader.search')}
+          aria-pressed={searching}
+          onClick={() => {
+            setSearching((open) => !open);
+            setFilter('');
+          }}
+        >
+          <SearchIcon aria-hidden="true" />
+        </Button>
+      </div>
+      {searching && (
+        <Input
+          ref={filterRef}
+          aria-label={t('reader.filter')}
+          placeholder={t('reader.filter')}
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      )}
+      {sidebarTab === 'files' ? <FilesPanel controller={controller} filter={filter} /> : <ContentsPanel filter={filter} />}
     </aside>
   );
 }
 
-function ContentsPanel() {
+function ContentsPanel({ filter }: { filter: string }) {
   const headings = useReaderStore((s) => s.headings);
-  return <TocPanel headings={headings} />;
+  const sourceId = useReaderStore((s) => s.sourceId);
+  const docPath = useReaderStore((s) => s.docPath);
+  // Source identity, not loadId: auto-refresh and draft restore bump loadId for the same document.
+  return <TocPanel key={`${sourceId}\n${docPath}`} headings={headings} filter={filter} />;
 }
 
-function FilesPanel({ controller }: { controller: ReaderController }) {
+function FilesPanel({ controller, filter }: { controller: ReaderController; filter: string }) {
   const { text, directorySource, docPath, treeNodes, recents } = useReaderStore(
     useShallow((s) => ({
       text: s.text,
@@ -234,7 +354,7 @@ function FilesPanel({ controller }: { controller: ReaderController }) {
               Open folder
             </Button>
           </div>
-          <FileTree nodes={treeNodes} activePath={docPath} onSelectFile={(p) => void controller.selectTreeFile(p)} />
+          <FileTree nodes={treeNodes} activePath={docPath} onSelectFile={(p) => void controller.selectTreeFile(p)} filter={filter} />
         </div>
       ) : (
         <div className="reader-files-empty">
@@ -303,6 +423,8 @@ function Content({
       docPath: s.docPath,
     })),
   );
+  const plugins = useSettingsStore(useShallow((s) => s.settings.plugins));
+  const pluginConfigKey = useMemo(() => pluginKey(plugins), [plugins]);
   const hasText = useDocumentReveal(controller.store);
   const setHeadings = useCallback((headings: Heading[]) => controller.store.setState({ headings }), [controller]);
   const onEdit = useCallback(
@@ -350,6 +472,8 @@ function Content({
               onHeadings={setHeadings}
               directorySource={directorySource}
               docPath={docPath}
+              plugins={plugins}
+              pluginKey={pluginConfigKey}
             />
           )}
         </div>

@@ -22,6 +22,7 @@ const allowedTags = [
   'hr',
   'i',
   'img',
+  'ins',
   'li',
   'ol',
   'p',
@@ -117,6 +118,8 @@ const extraAttributes = [
   'open',
   'target',
   'rel',
+  'colspan',
+  'rowspan',
 ];
 let activeBaseUrl = '';
 const purify = createDOMPurify(window);

@@ -38,7 +38,7 @@ test.describe('reduced motion', () => {
 
   test('menus, dialogs, and the palette have zero durations', async ({ page, extensionId }) => {
     await page.goto(readerUrl(extensionId));
-    await page.getByRole('button', { name: 'Export options' }).click();
+    await page.getByRole('button', { name: 'Menu' }).click();
     await expect(page.getByRole('menu')).toBeVisible();
     expect(await movingElements(page)).toEqual([]);
     await page.keyboard.press('Escape');
@@ -50,7 +50,7 @@ test.describe('reduced motion', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Command palette' }).click();
+    await page.keyboard.press('Control+k');
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
     expect(await movingElements(page)).toEqual([]);
   });
@@ -74,6 +74,66 @@ test.describe('reduced motion', () => {
       await expect(page.locator('.md-content h1')).toHaveText('Calm', { timeout: 20000 });
       expect(await movingElements(page)).toEqual([]);
       expect(await page.evaluate(() => (window as unknown as { __transitions: number }).__transitions)).toBe(0);
+    } finally {
+      await close();
+    }
+  });
+});
+
+test.describe('reduced motion, new surfaces', () => {
+  const SURFACE_DOC = ['# Calm', '', '## Section', '', '```js', 'const a = 1;', '```', ''].join('\n');
+
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+  });
+
+  for (const surface of ['popup', 'options']) {
+    test(`the settings panel in ${surface}.html has zero durations on every tab`, async ({ page, extensionId }) => {
+      await page.goto(`chrome-extension://${extensionId}/${surface}.html`);
+      await page.locator('#root > *').first().waitFor();
+      for (const name of ['General', 'Appearance', 'Plugins', 'About']) {
+        await page.getByRole('tab', { name }).click();
+        await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
+        expect(await movingElements(page), name).toEqual([]);
+      }
+    });
+  }
+
+  test('the reader menu, the Settings dialog, the About dialog, and the sidebar have zero durations', async ({ page, extensionId }) => {
+    const { origin, close } = await startFixtureServer((_req, res) => {
+      res.setHeader('content-type', 'text/markdown; charset=utf-8');
+      res.end(SURFACE_DOC);
+    });
+    try {
+      await page.goto(readerUrl(extensionId, `?src=${encodeURIComponent(`${origin}/calm.md`)}`));
+      await expect(page.locator('.md-content h1')).toHaveText('Calm', { timeout: 20000 });
+      const sidebar = page.locator('[data-slot="reader-toc"]');
+      await page.getByRole('button', { name: 'Menu' }).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      expect(await movingElements(page), 'menu').toEqual([]);
+
+      await page.getByRole('menuitem', { name: 'Settings' }).click();
+      const settings = page.getByRole('dialog', { name: 'Settings' });
+      await expect(settings).toBeVisible();
+      await settings.getByRole('tab', { name: 'Plugins' }).click();
+      expect(await movingElements(page), 'settings dialog').toEqual([]);
+      await page.keyboard.press('Escape');
+      await expect(settings).toHaveCount(0);
+
+      await page.getByRole('button', { name: 'Menu' }).click();
+      await page.getByRole('menuitem', { name: 'About' }).click();
+      await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
+      expect(await movingElements(page), 'About dialog').toEqual([]);
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+
+      const toggle = page.getByRole('button', { name: 'Toggle Sidebar' });
+      await toggle.click();
+      await expect(sidebar).toHaveAttribute('inert', '');
+      expect(await movingElements(page), 'sidebar closed').toEqual([]);
+      await toggle.click();
+      await expect(sidebar).not.toHaveAttribute('inert', '');
+      expect(await movingElements(page), 'sidebar open').toEqual([]);
     } finally {
       await close();
     }

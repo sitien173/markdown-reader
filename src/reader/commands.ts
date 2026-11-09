@@ -12,6 +12,10 @@ export type CommandId =
   | 'print'
   | 'toggle-sidebar'
   | 'focus-mode'
+  | 'toggle-raw'
+  | 'toggle-fullscreen'
+  | 'settings'
+  | 'about'
   | 'command-palette';
 
 /** The state slice command availability reads, so subscribers can select just these fields. */
@@ -35,6 +39,10 @@ export interface CommandDeps {
   print(): void;
   toggleSidebar(): void;
   toggleFocusMode(): void;
+  toggleRaw(): void;
+  toggleFullscreen(): void;
+  openSettings(): void;
+  openAbout(): void;
   openPalette(): void;
 }
 
@@ -42,7 +50,7 @@ const hasDoc = (s: CommandState) => s.text !== null;
 const canExport = (s: CommandState) => hasDoc(s) && s.mode !== 'edit';
 const always = () => true;
 
-/** Single registry for toolbar, palette, and shortcuts. Picker commands call straight through so they stay inside the user gesture. */
+/** Single registry for menu, palette, and shortcuts. Picker commands call straight through so they stay inside the user gesture. */
 export function createCommands(deps: CommandDeps): Command[] {
   return [
     { id: 'open-file', label: 'Open file', shortcut: 'Mod+O', available: always, run: () => deps.openFile() },
@@ -55,7 +63,11 @@ export function createCommands(deps: CommandDeps): Command[] {
     { id: 'export-html', label: 'Export HTML', available: canExport, run: () => deps.exportHtml() },
     { id: 'print', label: 'Print', shortcut: 'Mod+P', available: canExport, run: () => deps.print() },
     { id: 'toggle-sidebar', label: 'Toggle sidebar', shortcut: 'Mod+\\', available: always, run: () => deps.toggleSidebar() },
-    { id: 'focus-mode', label: 'Focus mode', available: hasDoc, run: () => deps.toggleFocusMode() },
+    { id: 'focus-mode', label: 'Zen mode', available: hasDoc, run: () => deps.toggleFocusMode() },
+    { id: 'toggle-raw', label: 'Toggle Raw', available: hasDoc, run: () => deps.toggleRaw() },
+    { id: 'toggle-fullscreen', label: 'Toggle Fullscreen', available: always, run: () => deps.toggleFullscreen() },
+    { id: 'settings', label: 'Settings', available: always, run: () => deps.openSettings() },
+    { id: 'about', label: 'About', available: always, run: () => deps.openAbout() },
     { id: 'command-palette', label: 'Command palette', shortcut: 'Mod+K', available: always, run: () => deps.openPalette() },
   ];
 }

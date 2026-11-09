@@ -102,3 +102,9 @@ export async function highlight(source: string, language: string): Promise<strin
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
+
+/** The block cache kind. It carries both code theme values from the root, so a change to either never reuses a stale entry. */
+export const highlightCacheKind = (): string => {
+  const { codeLight = 'light', codeDark = 'dark' } = document.documentElement.dataset;
+  return `code:${codeLight}:${codeDark}`;
+};
