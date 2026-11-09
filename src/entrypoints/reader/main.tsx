@@ -6,6 +6,7 @@ import { applyLanguage } from '../../i18n';
 import { useSettingsStore } from '../../store/settings-store';
 import App from './App';
 import '../../styles/globals.css';
+import '../../styles/popup.css';
 
 export async function bootReader(container: HTMLElement): Promise<void> {
   try {

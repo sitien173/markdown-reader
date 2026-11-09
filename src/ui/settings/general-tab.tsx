@@ -74,7 +74,7 @@ function IntervalControl({ value, onCommit }: { value: number; onCommit: (second
   );
 }
 
-export function GeneralTab() {
+export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: boolean }) {
   const t = useT();
   const general = useSettingsStore((s) => s.settings.general);
   const breaks = useSettingsStore((s) => s.settings.plugins.breaks);
@@ -174,10 +174,12 @@ export function GeneralTab() {
           <PencilIcon aria-hidden="true" />
           {t('settings.general.openEditor')}
         </Button>
-        <Button variant="ghost" className="popup-action" onClick={() => void renderCurrent()}>
-          <GlobeIcon aria-hidden="true" />
-          {t('settings.general.renderCurrent')}
-        </Button>
+        {showRenderCurrent && (
+          <Button variant="ghost" className="popup-action" onClick={() => void renderCurrent()}>
+            <GlobeIcon aria-hidden="true" />
+            {t('settings.general.renderCurrent')}
+          </Button>
+        )}
       </div>
       <section aria-label={t('settings.general.recentUrls')} className="popup-recents">
         <h2 className="popup-recents-title">{t('settings.general.recent')}</h2>

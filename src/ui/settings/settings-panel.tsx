@@ -39,14 +39,15 @@ const sections = [
   { id: 'about', icon: InfoIcon, tab: AboutTab },
 ] as const;
 
-export function SettingsPanel() {
+/** The reader dialog hides Render current tab: there, the current tab is the reader itself. */
+export function SettingsPanel({ showRenderCurrent = true }: { showRenderCurrent?: boolean }) {
   const t = useT();
   return (
     <Tabs defaultValue="general" orientation="vertical" className="h-full w-full gap-0" data-slot="settings-panel">
       <TabsList
         aria-label={t('settings.rail')}
         variant="line"
-        className="h-full w-[60px] shrink-0 justify-start gap-1 border-r bg-muted/40 px-2 py-3"
+        className="w-[60px] shrink-0 group-data-[orientation=vertical]/tabs:h-full justify-start gap-1 border-r bg-muted/40 px-2 py-3"
       >
         {sections.map(({ id, icon: Icon }) => (
           <TabsTrigger key={id} value={id} aria-label={t(`settings.tabs.${id}`)} className="h-9 flex-none justify-center">
@@ -56,7 +57,7 @@ export function SettingsPanel() {
       </TabsList>
       {sections.map(({ id, tab: Tab }) => (
         <TabsContent key={id} value={id} className="min-w-0 overflow-y-auto p-4">
-          <Tab />
+          {Tab === GeneralTab ? <GeneralTab showRenderCurrent={showRenderCurrent} /> : <Tab />}
         </TabsContent>
       ))}
     </Tabs>

@@ -195,6 +195,15 @@
   }
 }
 
+/* Tailwind v4 borders default to currentColor; utilities such as border and border-r use the token instead. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+}
+
 /* Input outlines are the only boundary that identifies a field, so they meet 3:1 in both schemes (tests/e2e/contrast.spec.ts). */
 :root {
   --control-border: #86868b;

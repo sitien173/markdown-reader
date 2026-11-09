@@ -19,7 +19,7 @@
   gap: 0.25rem;
 }
 .popup-action {
-  flex: 1;
+  flex: 1 1 auto;
   justify-content: flex-start;
   min-width: 0;
   height: 2.25rem;
