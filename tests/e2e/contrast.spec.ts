@@ -276,7 +276,7 @@ for (const scheme of ['light', 'dark'] as const) {
         await page.locator('#root > *').first().waitFor();
         for (const name of ['General', 'Appearance', 'Plugins', 'About']) {
           await page.getByRole('tab', { name }).click();
-          expect(await lowContrast(page.getByRole('tabpanel')), `${scheme} ${surface} ${name}`).toEqual([]);
+          expect(await lowContrast(page.getByRole('tabpanel', { name })), `${scheme} ${surface} ${name}`).toEqual([]);
         }
         expect(await lowContrast(page.getByRole('tablist'), UI, '[role="tab"]'), `${scheme} ${surface} rail icons`).toEqual([]);
       });
@@ -302,7 +302,7 @@ for (const scheme of ['light', 'dark'] as const) {
         const dialog = page.getByRole('dialog', { name: 'Settings' });
         for (const name of ['General', 'Appearance', 'Plugins', 'About']) {
           await dialog.getByRole('tab', { name }).click();
-          expect(await lowContrast(dialog.getByRole('tabpanel')), `${scheme} dialog ${name}`).toEqual([]);
+          expect(await lowContrast(dialog.getByRole('tabpanel', { name })), `${scheme} dialog ${name}`).toEqual([]);
         }
         await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Menu' }).click();

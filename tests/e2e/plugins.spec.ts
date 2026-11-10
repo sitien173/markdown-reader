@@ -76,7 +76,7 @@ test('turning one plugin off and back on in the popup changes the reader output'
 
 test('the All plugins switch sets every plugin and reflects derived state', async ({ page, extensionId }) => {
   await openPlugins(page, extensionId);
-  const switches = page.getByRole('tabpanel').getByRole('switch');
+  const switches = page.getByRole('tabpanel', { name: 'Plugins' }).getByRole('switch');
   const all = page.getByRole('switch', { name: 'All plugins', exact: true });
   const others = switches.filter({ hasNot: page.getByRole('switch', { name: 'All plugins', exact: true }) });
   await expect(switches).toHaveCount(19);
