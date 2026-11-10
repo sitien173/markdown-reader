@@ -5,13 +5,23 @@ nav_order: 2
 
 # Getting started
 
-## Prerequisites
+## Install from a release
+
+1. Download `markdown-reader-<version>-chrome.zip` from [GitHub Releases](https://github.com/sitien173/markdown-reader/releases).
+2. Unpack the ZIP file to a local directory.
+3. Open `chrome://extensions` in Chrome.
+4. Turn on **Developer mode**.
+5. Click **Load unpacked** and select the unpacked folder.
+
+## Build from source
+
+### Prerequisites
 
 - Node.js 24
 - pnpm 11, pinned in the `packageManager` field of `package.json`
 - Google Chrome or Chromium
 
-## Build
+### Build
 
 ```sh
 pnpm install --frozen-lockfile
@@ -20,7 +30,7 @@ pnpm build
 
 The unpacked extension is written to `.output/chrome-mv3/`.
 
-## Load the extension
+### Load the extension
 
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode**.

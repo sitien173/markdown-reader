@@ -6,6 +6,8 @@
 
 **Read, edit, and export Markdown from files, folders, and web addresses, offline, in one Chrome tab.**
 
+[![CI](https://github.com/sitien173/markdown-reader/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sitien173/markdown-reader/actions/workflows/ci.yml)
+
 [Features](#features) · [Getting started](#getting-started) · [Development](#development) · [Project structure](#project-structure) · [Documentation](#documentation)
 
 </div>
@@ -25,13 +27,23 @@ Markdown Reader is a Chrome extension built on Manifest V3. It opens Markdown fr
 
 ## Getting started
 
-### Prerequisites
+### Install from a release
+
+1. Download `markdown-reader-<version>-chrome.zip` from [GitHub Releases](https://github.com/sitien173/markdown-reader/releases).
+2. Unpack the ZIP file.
+3. Open `chrome://extensions` in Chrome.
+4. Turn on **Developer mode**.
+5. Click **Load unpacked** and select the unpacked folder.
+
+### Build from source
+
+#### Prerequisites
 
 - Node.js 24
 - pnpm 11, pinned in the `packageManager` field of `package.json`
 - Google Chrome or Chromium
 
-### Build
+#### Build
 
 ```sh
 pnpm install --frozen-lockfile
@@ -40,7 +52,7 @@ pnpm build
 
 The unpacked extension is written to `.output/chrome-mv3/`.
 
-### Load the extension
+#### Load the extension
 
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode**.
@@ -101,6 +113,8 @@ docs/
 
 ## Documentation
 
+- [Documentation site](https://sitien173.github.io/markdown-reader/): guides and reference
+- [SECURITY.md](SECURITY.md): security policy and vulnerability reporting
 - [docs/manual-checklist.md](docs/manual-checklist.md): manual test procedure
 - [docs/spikes.md](docs/spikes.md): verified platform spikes for file URL fetch, `FileSystemObserver`, and Mermaid under the MV3 CSP
 - [docs/plans/](docs/plans/): design and plan documents per feature

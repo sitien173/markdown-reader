@@ -67,6 +67,46 @@ docs(plans): add json-preview design
 - Keep the summary line short and in the imperative mood.
 - Do not commit build output or local tool state such as `.output/`, `.wxt/`, `coverage/`, or `test-results/`. They are covered by `.gitignore`.
 
+## Pull requests
+
+The `main` branch is protected. All changes reach `main` through pull requests.
+
+1. Create a feature branch from `main`:
+
+   ```sh
+   git checkout -b feat/my-change
+   ```
+2. Make your change, commit with Conventional Commits, and push the branch.
+3. Open a pull request against `main`.
+4. CI runs three required checks on every pull request:
+   - `CI Static` (`pnpm typecheck` and `pnpm lint`)
+   - `CI Unit` (`pnpm test`)
+   - `CI E2E` (Playwright tests)
+5. All three checks must pass before merging. Merges to `main` use squash merge.
+
+## Releases
+
+Releases are tagged on `main`:
+
+1. Bump the `"version"` field in `package.json`.
+2. Open a pull request with the version bump and merge it to `main` after checks pass.
+3. Update and inspect local `main`:
+
+   ```sh
+   git switch main && git pull --ff-only origin main && git log -1 --oneline
+   ```
+
+   Stop if any command fails. Confirm the printed commit is the merged version-bump PR.
+4. Only after confirming, tag and push:
+
+   ```sh
+   VERSION="$(node -p "require('./package.json').version")"
+   git tag "v$VERSION" && git push origin "v$VERSION"
+   ```
+
+   Note that release tags cannot be moved or deleted once pushed.
+5. The release workflow runs CI checks, packages the extension ZIP and SHA-256 checksum, and creates a GitHub Release.
+
 ## Update the docs
 
 - `README.md` for user-visible features, commands, or setup steps.

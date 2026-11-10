@@ -13,6 +13,8 @@ Phases 1 and 2 change the local repository and are consolidated into the single 
 
 Preserved invariants: listed in DESIGN.md. Product code changes only for the Phase 1 regression fixes. Performance budgets in `tests/e2e/perf.spec.ts` stay as they are.
 
+The Jekyll docs site in `site/` and `.github/workflows/pages.yml`, committed by another session as `dbd09e0` and `80ef5e1`, are included in this release by user decision on 2026-11-10. They keep their own commits.
+
 Out of scope: Chrome Web Store publication, code of conduct, CODEOWNERS, merge queue.
 
 ## Baseline Evidence
@@ -65,13 +67,14 @@ All six touch UI changed by `3532eb2`.
 
 ### Phase 2: CI, release, and community files
 
-**Phase Request:** Create the GitHub workflow, Dependabot, issue, PR, and security files exactly as specified in DESIGN.md "Architecture and Data Flow", and update the three docs. Resolve every action SHA with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha` and pin it with a trailing version comment. Do not push and do not call any `gh` command that writes.
+**Phase Request:** Create the GitHub workflow, Dependabot, issue, PR, and security files exactly as specified in DESIGN.md "Architecture and Data Flow", bring `.github/workflows/pages.yml` up to the same workflow rules, and update the docs. Resolve every action SHA with `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha` and pin it with a trailing version comment. Do not push and do not call any `gh` command that writes.
 **Goal:** All repository files for publication exist and pass local checks.
 **Depends on:** Phase 1
 **Invariants & Boundaries:** Job names exactly `CI Static`, `CI Unit`, `CI E2E`. Top-level `permissions: contents: read`; only the release `publish` job gets `contents: write`. `pull_request`, never `pull_request_target`. Checkout uses `persist-credentials: false`. No secrets beyond `GITHUB_TOKEN`. No product code.
 **Files:**
 - Create: `.github/workflows/ci.yml`
 - Create: `.github/workflows/release.yml`
+- Modify: `.github/workflows/pages.yml`
 - Create: `.github/dependabot.yml`
 - Create: `.github/ISSUE_TEMPLATE/bug_report.yml`
 - Create: `.github/ISSUE_TEMPLATE/feature_request.yml`
@@ -81,13 +84,16 @@ All six touch UI changed by `3532eb2`.
 - Modify: `README.md`
 - Modify: `CONTRIBUTING.md`
 - Modify: `AGENTS.md`
+- Modify, only to match the PR, release, or install flow: `site/contributing.md`, `site/getting-started.md`
 **Tasks:**
-1. Write `ci.yml` and `release.yml`, with the release `verify` job checking tag against `package.json` version and ancestry of `origin/main`.
+1. Write `ci.yml` and `release.yml`, with the release `verify` job checking tag against `package.json` version and ancestry of `origin/main`. Update `pages.yml`: pin every action SHA, `runs-on: ubuntu-24.04`, checkout with `persist-credentials: false`, top-level `permissions: contents: read`, and `pages: write` plus `id-token: write` only on `deploy`.
 2. Write `dependabot.yml`, the issue forms, `config.yml`, and the PR template.
 3. Write `SECURITY.md`; add the CI badge and install-from-release steps to `README.md`, the PR, squash-merge, and release flow to `CONTRIBUTING.md`, and the protected-`main` rule to `AGENTS.md`.
-4. Run `pnpm format` so Biome formats the Markdown.
+4. Keep `site/contributing.md` and `site/getting-started.md` consistent with the new PR, release, and install steps. Biome skips `site/`, so match the existing Kramdown style by hand.
+5. Run `pnpm format` so Biome formats the Markdown.
+6. Build the site with `docker run --rm -v "$PWD/site":/src -w /src jekyll/jekyll:4 jekyll build --baseurl /markdown-reader` or the closest available image, and confirm generated links and the logo resolve under `/markdown-reader/`. Report the exact command used.
 **Acceptance Criteria:**
-- `actionlint` reports no errors for both workflows.
+- `actionlint` reports no errors for all three workflows.
 - Every `uses:` line references a 40-character SHA with a version comment.
 - `pnpm lint` exits 0.
 **Reviewer Checklist:**
@@ -95,12 +101,13 @@ All six touch UI changed by `3532eb2`.
 - Tag and version values pass through environment variables and are quoted in shell.
 - `ci.yml` declares `workflow_call` so `release.yml` can reuse it.
 - Docs match the workflow behavior and use the README links that exist.
+- `pages.yml` keeps its triggers and `pages` concurrency group, and only `deploy` has `pages: write` and `id-token: write`.
 **Verification Checks:**
 - `docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest -color`
 - `pnpm lint`
 - `pnpm test`
 
-**Consolidation before Phase 3:** after Phases 1 and 2 pass review, replace their checkpoints with the plan commit, per `references/git-anchors.md`. Commit the plan artifacts in the same commit.
+**Consolidation before Phase 3:** after Phases 1 and 2 pass review, replace their checkpoints with the plan commit, per `references/git-anchors.md`. Commit the plan artifacts in the same commit. Keep `dbd09e0` and `80ef5e1` as separate commits: replay them onto the plan base first, then put the plan commit on top. Verify that the final tree equals the pre-consolidation tree.
 
 ### Phase 3: Publish and green CI
 
@@ -113,12 +120,14 @@ All six touch UI changed by `3532eb2`.
 - Modify, only if a workflow bug appears: `.github/workflows/ci.yml`
 **Tasks:**
 1. `gh repo create sitien173/markdown-reader --public --description "<from README tagline>"`, then `git remote add origin git@github.com:sitien173/markdown-reader.git` and `git push -u origin main`.
-2. Watch the run with `gh run watch`; on failure, read logs with `gh run view --log-failed`.
-3. For screenshot drift, download the `test-results` artifact, show the diffs to the user, and commit approved baselines as `test(e2e): use CI screenshots as baselines`.
+2. Enable Pages with `gh api -X POST repos/sitien173/markdown-reader/pages -f build_type=workflow`, then rerun the failed `pages.yml` run.
+3. Watch the CI run with `gh run watch`; on failure, read logs with `gh run view --log-failed`.
+4. For screenshot drift, download the `test-results` artifact, show the diffs to the user, and commit approved baselines as `test(e2e): use CI screenshots as baselines`.
 **Acceptance Criteria:**
 - `gh repo view sitien173/markdown-reader --json visibility --jq .visibility` prints `PUBLIC`.
 - `gh run list --branch main --workflow ci.yml --limit 1 --json conclusion --jq '.[0].conclusion'` prints `success`.
 - `git ls-remote origin` lists only `HEAD` and `refs/heads/main`.
+- The latest `pages.yml` run on `main` succeeds and `https://sitien173.github.io/markdown-reader/` returns 200.
 **Reviewer Checklist:**
 - Any baseline change was approved by the user.
 **Verification Checks:**

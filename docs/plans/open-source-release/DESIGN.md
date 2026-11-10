@@ -17,8 +17,9 @@ Success criteria:
 2. CI on `main` is green with the three checks `CI Static`, `CI Unit`, and `CI E2E`.
 3. A test PR cannot merge until all three checks pass. A direct push and a force push to `main` are rejected.
 4. The `v*` tag ruleset blocks tag updates and deletion.
-5. Private vulnerability reporting, Dependabot alerts and security updates, secret scanning with push protection, and CodeQL default setup are enabled.
-6. With user approval at that time, pushing `v1.0.0` creates a GitHub Release with `markdown-reader-1.0.0-chrome.zip` and its SHA-256 checksum.
+5. The Jekyll docs site in `site/` deploys to GitHub Pages from `pages.yml` and is served at `https://sitien173.github.io/markdown-reader/`.
+6. Private vulnerability reporting, Dependabot alerts and security updates, secret scanning with push protection, and CodeQL default setup are enabled.
+7. With user approval at that time, pushing `v1.0.0` creates a GitHub Release with `markdown-reader-1.0.0-chrome.zip` and its SHA-256 checksum.
 
 ## Constraints, Invariants, and Non-Goals
 
@@ -62,6 +63,7 @@ Files:
 | --- | --- |
 | `.github/workflows/ci.yml` | Triggers: `pull_request`, `push` to `main`, `workflow_call`. Top-level `permissions: contents: read`. Concurrency keyed by workflow and PR number or ref, with `cancel-in-progress`. Three jobs on `ubuntu-24.04`: `CI Static` runs `pnpm typecheck` and `pnpm lint`; `CI Unit` runs `pnpm test`; `CI E2E` runs `pnpm exec playwright install --with-deps --no-shell chromium`, then `pnpm test:e2e`, then uploads `test-results/` on failure. Setup per job: checkout with `persist-credentials: false`, `pnpm/action-setup` reading `packageManager`, `actions/setup-node` with Node 24 and `cache: pnpm`, `pnpm install --frozen-lockfile`. |
 | `.github/workflows/release.yml` | Trigger: `push` of tags `v*`. Job `verify`: tag equals `v` plus the `package.json` version, and the tagged commit is an ancestor of `origin/main`. Job `checks`: calls `ci.yml`. Job `package`: `pnpm exec wxt zip`, checks the ZIP exists, writes `<zip>.sha256`, uploads both as an artifact. Job `publish`: `permissions: contents: write`, downloads the artifact, runs `gh release create "$TAG" <zip> <sha256> --verify-tag --generate-notes` with `GH_TOKEN` set to `GITHUB_TOKEN`. No cancellation for releases. |
+| `.github/workflows/pages.yml` | Added by `80ef5e1` with the docs site from `dbd09e0`; user included it in this release 2026-11-10. Brought up to the same rules as `ci.yml`: SHA-pinned actions, `ubuntu-24.04`, checkout with `persist-credentials: false`, top-level `permissions: contents: read`, and `pages: write` plus `id-token: write` only on the `deploy` job. Triggers and the `pages` concurrency group stay. |
 | `.github/dependabot.yml` | `npm` weekly, one group for minor and patch updates; majors stay separate. `github-actions` weekly, one group. |
 | `.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml`, `config.yml` | Issue forms. `config.yml` turns off blank issues and links security reports to private vulnerability reporting. |
 | `.github/pull_request_template.md` | Summary and a checklist matching `CONTRIBUTING.md`. |
@@ -77,6 +79,7 @@ GitHub settings, applied with `gh api` after the first green run on `main`:
 - Repository: public, no auto-init, squash merge only, squash commit title from the PR title, delete head branches on merge.
 - Ruleset `main`: target `refs/heads/main`; `pull_request` with `required_approving_review_count: 0`; `required_status_checks` with `strict_required_status_checks_policy: true` and contexts taken from the observed check-run names and app ID; `non_fast_forward`; `deletion`; empty bypass list.
 - Ruleset `release-tags`: target `refs/tags/v*`; `update`; `deletion`; empty bypass list.
+- Pages: `build_type: workflow`, enabled right after the first push, then `pages.yml` is rerun.
 - Security: private vulnerability reporting, Dependabot alerts, Dependabot security updates, secret scanning, secret scanning push protection, CodeQL default setup for `javascript-typescript`.
 
 Order:
@@ -84,7 +87,7 @@ Order:
 1. Commit docs and `LICENSE` on `main`. Done in `c902a59`.
 2. Commit the `.github/` files and doc updates on `main`.
 3. Create the empty repository and push `main` over SSH with `git push -u origin main`.
-4. Fix CI with direct pushes while `main` is unprotected. Download the CI screenshot artifacts, review them, commit them as baselines.
+4. Enable Pages with `build_type: workflow` and rerun `pages.yml`, whose first run fails because Pages is not yet enabled. Fix CI with direct pushes while `main` is unprotected. Download the CI screenshot artifacts, review them, commit them as baselines.
 5. Apply the rulesets and security settings using the observed check names.
 6. Open a test PR and confirm merge is blocked until the checks pass; confirm a direct push to `main` is rejected.
 7. Ask the user before pushing `v1.0.0`.
@@ -94,6 +97,8 @@ Order:
 - Required-check name mismatch: the ruleset waits on a check that never reports, and every PR blocks. Mitigation: read names from `gh api repos/sitien173/markdown-reader/commits/main/check-runs` before creating the ruleset.
 - Screenshot drift on runners: `CI E2E` fails on the first run. Mitigation: step 4 reviews and commits CI baselines.
 - Performance budget failures on runners: stop and ask the user; budgets are not loosened silently.
+- Pages workflow fails on the first push: Pages cannot be enabled before the repository exists, and `GITHUB_TOKEN` cannot enable it. Mitigation: enable Pages through `gh api` and rerun the workflow.
+- Site links break under the `/markdown-reader/` base path. Mitigation: build the site locally with the `jekyll-build-pages` image before pushing and check the generated links.
 - Push rejected for workflow files: happens only over HTTPS with the current token. Mitigation: push over SSH.
 - Tag not matching `package.json` version, or a tag on a commit outside `main`: `verify` fails and nothing is published.
 - An empty bypass list also binds the maintainer. A broken required check blocks every merge until the ruleset is edited through `gh api` or the web UI.

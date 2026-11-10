@@ -29,6 +29,6 @@ Add `pnpm test:e2e` when the change touches UI, entry points, or extension behav
 
 Multi-phase features live in `docs/plans/<feature>/` as `DESIGN.md`, `PLAN.md`, and `.handover.md`. Before resuming a feature, read its `.handover.md` for status and next action. `docs/plans/json-preview/` is drafted and awaiting approval; it is not implemented.
 
-## Commits
+## Commits and Pull Requests
 
-Conventional Commits with a scope, such as `feat(reader): ...` or `docs(plans): ...`. One logical change per commit.
+The `main` branch is protected; work on a branch and open a pull request against `main`. Use Conventional Commits with a scope, such as `feat(reader): ...` or `docs(plans): ...`. One logical change per commit.
