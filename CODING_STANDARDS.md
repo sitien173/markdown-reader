@@ -29,7 +29,7 @@ This document records the conventions already used in `src/` and `tests/`. Follo
 
 ## 3. Formatting Rules
 
-Biome owns formatting. Run `pnpm format` before committing; `pnpm lint` must exit 0.
+Biome owns formatting. Run `pnpm format` before committing; `pnpm lint` must exit 0. Biome skips `site/`, because its formatter breaks the Kramdown attribute lists that the Jekyll docs site uses.
 
 - Indentation: **2 spaces**
 - Line length: **140 characters**

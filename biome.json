@@ -12,6 +12,7 @@
       "!**/test-results",
       "!**/tests/fixtures",
       "!**/docs/plans",
+      "!**/site",
       "!**/pnpm-lock.yaml"
     ]
   },
