@@ -43,6 +43,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec wxt prepare
       - run: pnpm test
 
   e2e:
