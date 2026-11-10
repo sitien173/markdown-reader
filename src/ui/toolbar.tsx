@@ -1,6 +1,7 @@
 import type { Command, CommandId } from '../reader/commands';
 import { Button } from '../components/ui/button';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { useShallow } from 'zustand/react/shallow';
 import { MODES, type Mode, useReaderStore } from '../store/reader-store';
 
@@ -28,11 +29,28 @@ export function Toolbar({ commands, onMode }: ToolbarProps) {
     return command;
   };
   const hasDoc = state.text !== null;
+  const title = state.docTitle || 'Markdown Reader';
 
   return (
     <header className="reader-bar" data-slot="reader-bar">
       <div className="reader-title" data-slot="reader-title">
-        <span className="reader-title-text">{state.docTitle || 'Markdown Reader'}</span>
+        <TooltipProvider delay={200}>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  className="reader-title-text max-w-[240px] sm:max-w-xs md:max-w-md lg:max-w-lg truncate cursor-default"
+                  title={title}
+                />
+              }
+            >
+              {title}
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start">
+              {title}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <span role="status" className="reader-dirty">
           {state.dirty && (
             <>

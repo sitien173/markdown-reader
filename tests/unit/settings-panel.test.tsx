@@ -87,11 +87,11 @@ describe('SettingsPanel shell', () => {
     expect(buttons.at(-1)?.textContent).toBe('Reset settings');
   });
 
-  it('General lists at most 5 recent URLs, newest first', () => {
-    const urls = [...container.querySelectorAll('.popup-recent-url')].map((b) => b.textContent);
-    expect(urls).toEqual(recentUrls.slice(0, 5));
-    expect(urls).toHaveLength(5);
-    expect(urls[0]).toBe('https://example.com/doc-7');
+  it('General does not list recent URLs or Open Editor navigate', () => {
+    expect(container.querySelector('.popup-recents')).toBeNull();
+    expect(container.querySelector('.popup-recent-url')).toBeNull();
+    const buttons = [...container.querySelectorAll('[role="tabpanel"] button')].map((b) => b.textContent);
+    expect(buttons).not.toContain('Open editor');
   });
 
   it('a rejected reset closes the dialog and shows the error in the alert', async () => {

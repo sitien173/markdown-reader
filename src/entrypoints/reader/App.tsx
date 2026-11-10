@@ -360,13 +360,17 @@ function FilesPanel({ controller, filter }: { controller: ReaderController; filt
     <>
       {fileTree ? (
         <div className="reader-files-panel">
-          <div className="reader-folder-actions flex items-center justify-between gap-2 px-2 py-1">
-            <span className="text-sm font-medium truncate" title={rootFolderName}>
-              {rootFolderName}
-            </span>
+          <div className="reader-folder-actions flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-muted/60 border border-border/40">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FolderIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="text-sm font-medium truncate" title={rootFolderName}>
+                {rootFolderName}
+              </span>
+            </div>
             <Button
               variant="ghost"
               size="icon"
+              className="size-7 shrink-0"
               aria-label={t('reader.upOneLevel')}
               title={t('reader.upOneLevel')}
               disabled={getParentUrl(fileTree.rootUrl) === null}
@@ -389,18 +393,26 @@ function FilesPanel({ controller, filter }: { controller: ReaderController; filt
         </div>
       ) : directorySource ? (
         <div className="reader-files-panel">
-          <div className="reader-folder-actions">
-            <Button variant="secondary" onClick={() => void controller.openFolder()}>
-              Open folder
+          <div className="reader-folder-actions flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-muted/60 border border-border/40">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FolderIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="text-sm font-medium truncate" title={directorySource.root.name}>
+                {directorySource.root.name}
+              </span>
+            </div>
+            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => void controller.openFolder()}>
+              Change
             </Button>
           </div>
           <FileTree nodes={treeNodes} activePath={docPath} onSelectFile={(p) => void controller.selectTreeFile(p)} filter={filter} />
         </div>
       ) : (
         <div className="reader-files-empty">
-          <p className="text-sm">No folder opened.</p>
-          {fileAccessError && <p className="text-sm text-muted-foreground">{t('reader.fileAccessHint')}</p>}
-          <Button variant="secondary" onClick={() => void controller.openFolder()}>
+          <FolderIcon className="size-8 text-muted-foreground/50 mb-1" aria-hidden="true" />
+          <p className="text-sm font-medium">No folder opened.</p>
+          <p className="text-xs text-muted-foreground">Open a folder to browse its Markdown files.</p>
+          {fileAccessError && <p className="text-sm text-destructive">{t('reader.fileAccessHint')}</p>}
+          <Button variant="secondary" size="sm" className="mt-1" onClick={() => void controller.openFolder()}>
             Open folder
           </Button>
         </div>

@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react';
 import { useT } from '../i18n';
 import type { TreeNode } from '../source/directory';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../components/ui/collapsible';
@@ -28,7 +28,11 @@ export function FileTree({ nodes, activePath, onSelectFile, filter = '', onExpan
   const needle = filter.trim().toLowerCase();
   const shown = needle ? filterTree(nodes, needle) : nodes;
   if (shown.length === 0) {
-    return <div className="text-sm">{needle ? t('reader.noMatches') : 'No Markdown files found.'}</div>;
+    return (
+      <div className="text-sm text-muted-foreground px-2 py-3 text-center">
+        {needle ? t('reader.noMatches') : 'No Markdown files found.'}
+      </div>
+    );
   }
 
   return (
@@ -46,10 +50,20 @@ export function FileTree({ nodes, activePath, onSelectFile, filter = '', onExpan
                 }}
               >
                 <CollapsibleTrigger
-                  render={<button type="button" className="nav-item" data-slot="file-tree-toggle" aria-label={`Toggle ${node.name}`} />}
+                  render={
+                    <button
+                      type="button"
+                      className="nav-item group"
+                      data-slot="file-tree-toggle"
+                      aria-label={`Toggle ${node.name}`}
+                      title={node.name}
+                    />
+                  }
                 >
                   <ChevronRight className="nav-caret" aria-hidden="true" />
-                  <span>{node.name}</span>
+                  <Folder className="nav-folder-closed" aria-hidden="true" />
+                  <FolderOpen className="nav-folder-open" aria-hidden="true" />
+                  <span className="truncate">{node.name}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   {node.error ? (
@@ -79,9 +93,12 @@ export function FileTree({ nodes, activePath, onSelectFile, filter = '', onExpan
               data-slot="file-tree-file"
               className={`nav-item${isActive ? ' nav-item--active' : ''}`}
               aria-current={isActive ? 'page' : undefined}
+              title={node.name}
               onClick={() => onSelectFile(node.path)}
             >
-              <span>{node.name}</span>
+              <span className="nav-item-spacer" aria-hidden="true" />
+              <FileText className="nav-file-icon" aria-hidden="true" />
+              <span className="truncate">{node.name}</span>
             </button>
           </li>
         );

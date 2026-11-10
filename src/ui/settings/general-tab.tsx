@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpenIcon, GlobeIcon, PencilIcon } from 'lucide-react';
+import { BookOpenIcon, GlobeIcon } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import {
   Dialog,
@@ -15,13 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Slider } from '../../components/ui/slider';
 import { Switch } from '../../components/ui/switch';
 import { Textarea } from '../../components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
 import { type I18nKey, useT } from '../../i18n';
 import type { Settings } from '../../lib/settings';
 import { isAllowedUrl } from '../../source/url';
 import { clampIntervalSec } from '../../source/watch';
 import { useSettingsStore } from '../../store/settings-store';
-import { getRecentUrls } from '../../store/recent';
 import { FileAccessDialog } from '../file-access-dialog';
 import { SettingRow } from './settings-panel';
 
@@ -109,7 +107,6 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
   const breaks = useSettingsStore((s) => s.settings.plugins.breaks);
   const update = useSettingsStore((s) => s.update);
   const [fileAccess, setFileAccess] = useState<boolean | null>(null);
-  const [recent, setRecent] = useState<string[]>([]);
   const [fileAccessOpen, setFileAccessOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [error, setError] = useState('');
@@ -155,9 +152,6 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
     fileAccess === null
       ? t('settings.general.fileAccessChecking')
       : t(fileAccess ? 'settings.general.fileAccessAllowed' : 'settings.general.fileAccessDenied');
-  useEffect(() => {
-    void getRecentUrls().then((urls) => setRecent(urls.slice(0, 5)));
-  }, []);
   async function open(action: string, url?: string) {
     if (url && !isAllowedUrl(url)) {
       setError(t('settings.general.urlSchemeError'));
@@ -199,10 +193,6 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
           <BookOpenIcon aria-hidden="true" />
           {t('settings.general.openViewer')}
         </Button>
-        <Button variant="ghost" className="popup-action" onClick={() => void open('open-editor')}>
-          <PencilIcon aria-hidden="true" />
-          {t('settings.general.openEditor')}
-        </Button>
         {showRenderCurrent && (
           <Button variant="ghost" className="popup-action" onClick={() => void renderCurrent()}>
             <GlobeIcon aria-hidden="true" />
@@ -210,27 +200,6 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
           </Button>
         )}
       </div>
-      <section aria-label={t('settings.general.recentUrls')} className="popup-recents">
-        <h2 className="popup-recents-title">{t('settings.general.recent')}</h2>
-        {recent.length ? (
-          <TooltipProvider delay={300}>
-            {recent.map((url) => (
-              <Tooltip key={url}>
-                <TooltipTrigger
-                  render={<Button className="popup-recent-url" variant="ghost" onClick={() => void open('open-viewer', url)} />}
-                >
-                  {url}
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="popup-tooltip">
-                  {url}
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </TooltipProvider>
-        ) : (
-          <p className="popup-empty">{t('settings.general.noRecent')}</p>
-        )}
-      </section>
       {toggle('enabled')}
       <SettingRow
         label={t('settings.general.fileAccess')}

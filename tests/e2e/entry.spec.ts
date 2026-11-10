@@ -49,7 +49,7 @@ test('stale and other-URL session text are ignored', async ({ page, extensionId 
   await expect(page.locator('.md-content h1')).toHaveText('Refetched body must not render');
 });
 
-test('popup actions open the requested reader mode and recent URLs are newest first', async ({ context, extensionId }) => {
+test('popup actions open the requested reader mode', async ({ context, extensionId }) => {
   const first = context.pages()[0] ?? (await context.newPage());
   await first.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/one.md`)}`);
   await expect(first.locator('.md-content h1')).toHaveText('Refetched body must not render');
@@ -74,17 +74,6 @@ test('popup actions open the requested reader mode and recent URLs are newest fi
   const viewer = await opened;
   await expect(viewer).toHaveURL(/reader\.html\?mode=read/);
   await viewer.close();
-
-  const popup2 = await context.newPage();
-  await popup2.goto(`chrome-extension://${extensionId}/popup.html`);
-  const openedEdit = context.waitForEvent('page');
-  await popup2.getByRole('button', { name: 'Open editor' }).click();
-  const editor = await openedEdit;
-  await expect(editor).toHaveURL(/reader\.html\?mode=edit/);
-  await editor.close();
-  await expect(popup2.getByRole('region', { name: 'Recent URLs' })).toContainText(`${origin}/two.md`);
-  const recentText = await popup2.getByRole('region', { name: 'Recent URLs' }).innerText();
-  expect(recentText.indexOf('/two.md')).toBeLessThan(recentText.indexOf('/one.md'));
 });
 
 test('popup shows a role=alert error when the current tab cannot be rendered', async ({ context, extensionId }) => {

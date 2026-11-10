@@ -3,9 +3,6 @@ import { test, expect } from './fixtures';
 
 const url = (extensionId: string, page: string) => `chrome-extension://${extensionId}/${page}`;
 const tabs = ['General', 'Appearance', 'Plugins', 'About'];
-const longRecentUrl = `file:///home/user/Downloads/${'nested-folder/'.repeat(8)}report.md`;
-
-type ChromeWindow = Window & { chrome: { storage: { local: { set(items: object): Promise<void> } } } };
 
 async function boxOf(locator: Locator) {
   const box = await locator.boundingBox();
@@ -59,11 +56,9 @@ test('settings panel border uses the border token', async ({ page, extensionId }
   await expect(page.locator('main')).toHaveCSS('border-top-color', 'rgb(217, 217, 222)');
 });
 
-test('reader dialog keeps General controls inside the dialog with a long recent URL', async ({ page, extensionId }) => {
+test('reader dialog keeps General controls inside the dialog', async ({ page, extensionId }) => {
   await page.goto(url(extensionId, 'reader.html'));
-  await page.evaluate((recent) => (window as unknown as ChromeWindow).chrome.storage.local.set({ recentUrls: [recent] }), longRecentUrl);
   const dialog = await openDialog(page, extensionId);
-  await expect(dialog.getByRole('button', { name: longRecentUrl })).toBeVisible();
   const dialogBox = await boxOf(dialog);
   const switchBox = await boxOf(dialog.getByRole('switch', { name: 'Enable', exact: true }));
   expect(switchBox.x + switchBox.width).toBeLessThanOrEqual(dialogBox.x + dialogBox.width);

@@ -197,19 +197,9 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Save' }).click();
     await expectContrast(scheme, 'toast', page.locator('[data-slot="toast"]'));
 
-    // A recent URL gives the popup a tooltip trigger.
-    const { origin, close } = await startDocServer();
-    try {
-      await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/r.md`)}`);
-      await expect(page.locator('.md-content h1')).toHaveText('Title', { timeout: 20000 });
-      const popup = await context.newPage();
-      await popup.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
-      await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-      await popup.getByRole('region', { name: 'Recent URLs' }).getByRole('button').first().hover();
-      await expectContrast(scheme, 'tooltip', popup.locator('[data-slot="tooltip-content"]'));
-    } finally {
-      await close();
-    }
+    // The navbar file name gives a tooltip trigger.
+    await page.locator('.reader-title-text').hover();
+    await expectContrast(scheme, 'tooltip', page.locator('[data-slot="tooltip-content"]'));
   });
 }
 
