@@ -22,7 +22,7 @@ Add `pnpm test:e2e` when the change touches UI, entry points, or extension behav
 - **Rendered HTML:** everything reaching the DOM goes through `sanitize()` in `src/render/sanitize.ts`. Treat allow-list edits as security changes and add an XSS test case.
 - **CSP:** MV3 forbids remote code. Bundle every dependency; Mermaid loads by bundled dynamic import, as verified in `docs/spikes.md`.
 - **Permissions:** a new permission in `wxt.config.ts` needs a justification in `CHROMEWEBSTORE.md`.
-- **Visual snapshots:** `tests/e2e/settings-layout.spec.ts` compares Linux screenshots. Update them only for intended layout changes, with `pnpm exec playwright test settings-layout --update-snapshots` after a build.
+- **Visual snapshots:** `tests/e2e/settings-layout.spec.ts` compares Linux screenshots rendered on the `CI E2E` runner. Local runs can differ because of system fonts. Update them only for intended layout changes, using the `test-results` artifact from a failed `CI E2E` run.
 - **Headless limits:** native pickers and saving to disk cannot run headless. Add steps to `docs/manual-checklist.md` instead.
 
 ## Plans
