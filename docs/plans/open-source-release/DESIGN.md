@@ -30,7 +30,7 @@ Constraints:
 
 Invariants:
 
-- Product code and product behavior stay unchanged. Only CI files, repository docs, and E2E screenshot baselines change.
+- Product code and product behavior stay unchanged, except for fixing the 6 E2E regressions from `3532eb2` found at plan base: sidebar contrast in `contrast.spec.ts`, reduced-motion durations in `motion.spec.ts`, and stale General tab screenshots in `settings-layout.spec.ts`. User-approved 2026-11-10. Otherwise only CI files, repository docs, `.gitignore`, and E2E screenshot baselines change.
 - Performance budgets in `tests/e2e/perf.spec.ts` are not loosened without explicit user approval.
 - `"private": true` stays in `package.json` to prevent npm publication.
 - Full history is published unchanged, including the author email `tienngo@ankvn.com`.
