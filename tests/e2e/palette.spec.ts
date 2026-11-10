@@ -367,6 +367,7 @@ test.describe('shortcuts', () => {
 
   test('a handled shortcut calls preventDefault', async ({ page, extensionId }) => {
     await page.goto(readerUrl(extensionId));
+    await page.locator('#root > *').first().waitFor();
     const prevented = await page.evaluate(() => {
       const results: boolean[] = [];
       for (const key of ['s', 'o', '\\', 'p', 'k']) {
