@@ -17,6 +17,12 @@ Native File System Access API pickers, persistent handle permission re-prompting
    - The first Markdown document in the tree opens and renders in the reader.
    - Clicking any other Markdown document in the tree opens and renders it.
    - Clicking a folder node expands or collapses its contents.
+7. Verify picker hiding and settings toggle:
+   - In a directory containing dot-items (e.g. `.git`), entries ignored by `.gitignore`, or patterns matched by Settings (e.g. `node_modules/`), verify these entries are hidden from the tree by default.
+   - Open Settings (**Settings** dialog from menu or Command Palette `Control+K`) -> **General**.
+   - Turn **Show hidden and ignored items** ON.
+   - Verify that the picker tree refreshes and displays the previously hidden dot-items, `.gitignore` entries, and ignored folders without needing to re-pick the directory.
+   - Turn **Show hidden and ignored items** OFF and verify those entries are hidden again.
 
 ## 2. Directory Watch and Live Updates
 

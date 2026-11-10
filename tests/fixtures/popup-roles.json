@@ -35,9 +35,10 @@
         "button:open viewer",
         "button:render current tab",
         "heading2:recent",
-        "slider:auto-refresh interval slider"
+        "slider:auto-refresh interval slider",
+        "textbox:ignore patterns in gitignore syntax"
       ],
-      "reason": "Extra: the popup open actions and recents are existing popup behavior, the file access row is a named button, and the interval has a slider beside its number field."
+      "reason": "Extra: the popup open actions and recents are existing popup behavior, the file access row is a named button, the interval has a slider beside its number field, and the ignore patterns field is a folder tree setting."
     },
     "appearance": {
       "entries": [

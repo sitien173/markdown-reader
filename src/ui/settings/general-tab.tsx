@@ -14,6 +14,7 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Slider } from '../../components/ui/slider';
 import { Switch } from '../../components/ui/switch';
+import { Textarea } from '../../components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
 import { type I18nKey, useT } from '../../i18n';
 import type { Settings } from '../../lib/settings';
@@ -74,6 +75,34 @@ function IntervalControl({ value, onCommit }: { value: number; onCommit: (second
   );
 }
 
+function IgnorePatternsControl({ value, onCommit }: { value: string; onCommit: (patterns: string) => void }) {
+  const t = useT();
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) {
+      onCommit(draft);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-1.5 py-1">
+      <div>
+        <div className="text-sm font-medium">{t('settings.general.ignorePatterns')}</div>
+        <p className="text-xs text-muted-foreground">{t('settings.general.ignorePatternsDescription')}</p>
+      </div>
+      <Textarea
+        aria-label={t('settings.general.ignorePatternsField')}
+        spellCheck={false}
+        rows={3}
+        className="font-mono text-xs"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+      />
+    </div>
+  );
+}
+
 export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: boolean }) {
   const t = useT();
   const general = useSettingsStore((s) => s.settings.general);
@@ -104,7 +133,7 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
   const toggle = (
     key: keyof Pick<
       Settings['general'],
-      'enabled' | 'outlineCollapsing' | 'renderTxt' | 'autoRefresh' | 'autoRefreshRemote' | 'charsetCompat'
+      'enabled' | 'outlineCollapsing' | 'renderTxt' | 'autoRefresh' | 'autoRefreshRemote' | 'charsetCompat' | 'showHiddenItems'
     >,
   ) => {
     const name = key === 'enabled' ? 'enable' : key;
@@ -238,6 +267,8 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
         />
       </SettingRow>
       {toggle('charsetCompat')}
+      {toggle('showHiddenItems')}
+      <IgnorePatternsControl value={general.ignorePatterns} onCommit={(ignorePatterns) => void save({ general: { ignorePatterns } })} />
       <SettingRow
         label={t('settings.general.language')}
         description={t('settings.general.languageDescription')}

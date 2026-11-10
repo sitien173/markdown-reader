@@ -1,23 +1,31 @@
 import type { Source } from './types';
 import { watchDirectory, type DirectoryWatchEvents } from './watch';
 import { SaveConflictError } from './file-handle';
+import { createHidingRule, type GitignoreLevel } from './hidden';
+import { useSettingsStore } from '../store/settings-store';
 
 export type FileNode = {
   kind: 'file';
   name: string;
   path: string;
-  handle: FileSystemFileHandle;
 };
 
 export type DirectoryNode = {
   kind: 'directory';
   name: string;
   path: string;
-  handle: FileSystemDirectoryHandle;
-  children: TreeNode[];
+  children: TreeNode[] | null;
+  error?: boolean;
 };
 
 export type TreeNode = FileNode | DirectoryNode;
+
+export function compareTreeNodes(a: TreeNode, b: TreeNode): number {
+  if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+  const cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  if (cmp !== 0) return cmp;
+  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+}
 
 export type { DirectoryWatchEvents };
 
@@ -53,39 +61,61 @@ export function resolveRelativePath(baseDocPath: string, relativePath: string): 
   };
 }
 
-export async function buildTree(dirHandle: FileSystemDirectoryHandle, parentPath = ''): Promise<TreeNode[]> {
+export async function buildTree(
+  dirHandle: FileSystemDirectoryHandle,
+  parentPath: string,
+  chain: GitignoreLevel[],
+  settings: { showHiddenItems: boolean; ignorePatterns: string },
+): Promise<TreeNode[]> {
+  let currentChain = chain;
+  if (!settings.showHiddenItems) {
+    try {
+      const gitignoreHandle = await dirHandle.getFileHandle('.gitignore');
+      const file = await gitignoreHandle.getFile();
+      const gitignoreText = await file.text();
+      currentChain = [...currentChain, { dirPath: parentPath, gitignoreText }];
+    } catch {
+      // No .gitignore at this level
+    }
+  }
+
+  const isHidden = createHidingRule({
+    showHiddenItems: settings.showHiddenItems,
+    ignorePatterns: settings.ignorePatterns,
+    chain: currentChain,
+  });
+
   const nodes: TreeNode[] = [];
   for await (const entry of (dirHandle as any).values()) {
     const entryPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
     if (entry.kind === 'file') {
+      if (isHidden(entryPath, false)) {
+        continue;
+      }
       if (/\.(?:md|markdown)$/i.test(entry.name)) {
         nodes.push({
           kind: 'file',
           name: entry.name,
           path: entryPath,
-          handle: entry as FileSystemFileHandle,
         });
       }
     } else if (entry.kind === 'directory') {
-      const children = await buildTree(entry as FileSystemDirectoryHandle, entryPath);
+      if (isHidden(entryPath, true)) {
+        continue;
+      }
+      const children = await buildTree(entry as FileSystemDirectoryHandle, entryPath, currentChain, settings);
       if (children.length > 0) {
         nodes.push({
           kind: 'directory',
           name: entry.name,
           path: entryPath,
-          handle: entry as FileSystemDirectoryHandle,
           children,
         });
       }
     }
   }
 
-  nodes.sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
-    const cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-    if (cmp !== 0) return cmp;
-    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-  });
+  nodes.sort(compareTreeNodes);
 
   return nodes;
 }
@@ -106,7 +136,8 @@ export class DirectorySource implements Source {
   }
 
   async getTree(): Promise<TreeNode[]> {
-    return buildTree(this.root);
+    const { showHiddenItems, ignorePatterns } = useSettingsStore.getState().settings.general;
+    return buildTree(this.root, '', [], { showHiddenItems, ignorePatterns });
   }
 
   async getFileHandle(relativePath: string): Promise<FileSystemFileHandle | null> {

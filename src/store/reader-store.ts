@@ -9,6 +9,13 @@ export type Mode = 'read' | 'edit' | 'split';
 export type SidebarTab = 'contents' | 'files';
 export type Banner = { kind: 'error'; message: string } | { kind: 'externalChange' } | null;
 
+export interface FileTreeState {
+  rootUrl: string;
+  nodes: TreeNode[];
+  version?: number;
+  repoRoot?: string | null;
+}
+
 export interface ReaderState {
   mode: Mode;
   source: string;
@@ -32,6 +39,8 @@ export interface ReaderState {
   sourceId: string;
   directorySource: DirectorySource | null;
   treeNodes: TreeNode[];
+  fileTree: FileTreeState | null;
+  fileAccessError: boolean;
 }
 
 export const MODES: Mode[] = ['read', 'edit', 'split'];
@@ -65,6 +74,8 @@ function initialState(): ReaderState {
     sourceId: '',
     directorySource: null,
     treeNodes: [],
+    fileTree: null,
+    fileAccessError: false,
   };
 }
 

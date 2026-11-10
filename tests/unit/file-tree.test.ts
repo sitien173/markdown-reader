@@ -8,29 +8,16 @@ import type { TreeNode } from '../../src/source/directory';
 describe('FileTree', () => {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-  const fakeFileHandle = {
-    kind: 'file' as const,
-    name: 'guide.md',
-    getFile: async () => new File(['# Guide'], 'guide.md'),
-  } as unknown as FileSystemFileHandle;
-
-  const fakeDirHandle = {
-    kind: 'directory' as const,
-    name: 'docs',
-  } as unknown as FileSystemDirectoryHandle;
-
   const nodes: TreeNode[] = [
     {
       kind: 'directory',
       name: 'docs',
       path: 'docs',
-      handle: fakeDirHandle,
       children: [
         {
           kind: 'file',
           name: 'guide.md',
           path: 'docs/guide.md',
-          handle: fakeFileHandle,
         },
       ],
     },
@@ -38,7 +25,6 @@ describe('FileTree', () => {
       kind: 'file',
       name: 'readme.md',
       path: 'readme.md',
-      handle: { ...fakeFileHandle, name: 'readme.md' } as unknown as FileSystemFileHandle,
     },
   ];
 
@@ -70,7 +56,7 @@ describe('FileTree', () => {
     container.remove();
   });
 
-  it('calls onSelectFile with path and handle when a file is clicked', () => {
+  it('calls onSelectFile with path when a file is clicked', () => {
     const onSelectFile = vi.fn();
     const container = document.createElement('div');
     document.body.append(container);
@@ -89,7 +75,7 @@ describe('FileTree', () => {
     });
 
     expect(onSelectFile).toHaveBeenCalledTimes(1);
-    expect(onSelectFile).toHaveBeenCalledWith('readme.md', expect.anything());
+    expect(onSelectFile).toHaveBeenCalledWith('readme.md');
 
     act(() => root.unmount());
     container.remove();
@@ -105,6 +91,93 @@ describe('FileTree', () => {
     });
 
     expect(container.textContent).toContain('No Markdown files');
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('renders an unloaded folder (children === null) as a collapsed collapsible', () => {
+    const onSelectFile = vi.fn();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    const unloadedNodes = [
+      {
+        kind: 'directory' as const,
+        name: 'unloaded',
+        path: 'unloaded',
+        children: null,
+      },
+    ];
+
+    act(() => {
+      root.render(React.createElement(FileTree, { nodes: unloadedNodes as any, onSelectFile }));
+    });
+
+    const toggle = container.querySelector('[data-slot="file-tree-toggle"]');
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('filters unloaded folders by name and keeps matching unloaded folders', () => {
+    const onSelectFile = vi.fn();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    const mixedNodes = [
+      {
+        kind: 'directory' as const,
+        name: 'target-folder',
+        path: 'target-folder',
+        children: null,
+      },
+      {
+        kind: 'directory' as const,
+        name: 'other-folder',
+        path: 'other-folder',
+        children: null,
+      },
+    ];
+
+    act(() => {
+      root.render(React.createElement(FileTree, { nodes: mixedNodes as any, filter: 'target', onSelectFile }));
+    });
+
+    const items = container.querySelectorAll('[data-slot="file-tree-toggle"]');
+    expect(items.length).toBe(1);
+    expect(items[0]?.textContent).toContain('target-folder');
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('renders inline error message when folder expansion failed with error flag', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    const errorNodes: TreeNode[] = [
+      {
+        kind: 'directory',
+        name: 'broken-folder',
+        path: 'broken-folder',
+        children: [],
+        error: true,
+      },
+    ];
+
+    act(() => {
+      root.render(React.createElement(FileTree, { nodes: errorNodes, activePath: null, onSelectFile: vi.fn() }));
+    });
+
+    const errorEl = container.querySelector('[data-slot="file-tree-error"]');
+    expect(errorEl).not.toBeNull();
+    expect(errorEl?.textContent).toBe('Could not read folder');
 
     act(() => root.unmount());
     container.remove();

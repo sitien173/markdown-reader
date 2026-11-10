@@ -3,7 +3,8 @@ import { flushSync } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { EditorPane } from '../../ui/editor-pane';
 import type { MarkdownViewHandle } from '../../ui/markdown-view';
-import { FolderIcon, ListIcon, PanelLeftIcon, SearchIcon } from 'lucide-react';
+import { FolderIcon, FolderUp, ListIcon, PanelLeftIcon, SearchIcon } from 'lucide-react';
+import { getParentUrl } from '../../source/file-url-tree';
 import { Input } from '../../components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '../../components/ui/toggle-group';
 import { t, useT } from '../../i18n';
@@ -336,18 +337,57 @@ function ContentsPanel({ filter }: { filter: string }) {
 }
 
 function FilesPanel({ controller, filter }: { controller: ReaderController; filter: string }) {
-  const { text, directorySource, docPath, treeNodes, recents } = useReaderStore(
+  const { text, directorySource, fileTree, fileAccessError, docPath, treeNodes, recents } = useReaderStore(
     useShallow((s) => ({
       text: s.text,
       directorySource: s.directorySource,
+      fileTree: s.fileTree,
+      fileAccessError: s.fileAccessError,
       docPath: s.docPath,
       treeNodes: s.treeNodes,
       recents: s.recents,
     })),
   );
+
+  const rootFolderName = useMemo(() => {
+    if (!fileTree) return '';
+    const pathname = new URL(fileTree.rootUrl).pathname.replace(/\/+$/, '');
+    const name = pathname.split('/').pop();
+    return name ? decodeURIComponent(name) : '/';
+  }, [fileTree]);
+
   return (
     <>
-      {directorySource ? (
+      {fileTree ? (
+        <div className="reader-files-panel">
+          <div className="reader-folder-actions flex items-center justify-between gap-2 px-2 py-1">
+            <span className="text-sm font-medium truncate" title={rootFolderName}>
+              {rootFolderName}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('reader.upOneLevel')}
+              title={t('reader.upOneLevel')}
+              disabled={getParentUrl(fileTree.rootUrl) === null}
+              onClick={() => void controller.goUp()}
+            >
+              <FolderUp className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+          <FileTree
+            key={`${fileTree.rootUrl}:${fileTree.version ?? 0}`}
+            nodes={fileTree.nodes}
+            activePath={docPath}
+            onSelectFile={(p) => {
+              const fileUrl = new URL(p.split('/').map(encodeURIComponent).join('/'), fileTree.rootUrl).href;
+              void controller.load(fileUrl);
+            }}
+            onExpandFolder={(p) => void controller.expandFolder(p)}
+            filter={filter}
+          />
+        </div>
+      ) : directorySource ? (
         <div className="reader-files-panel">
           <div className="reader-folder-actions">
             <Button variant="secondary" onClick={() => void controller.openFolder()}>
@@ -359,6 +399,7 @@ function FilesPanel({ controller, filter }: { controller: ReaderController; filt
       ) : (
         <div className="reader-files-empty">
           <p className="text-sm">No folder opened.</p>
+          {fileAccessError && <p className="text-sm text-muted-foreground">{t('reader.fileAccessHint')}</p>}
           <Button variant="secondary" onClick={() => void controller.openFolder()}>
             Open folder
           </Button>

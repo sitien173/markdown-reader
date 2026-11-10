@@ -29,6 +29,8 @@ describe('reader store', () => {
       docTitle: '',
       urlDialogOpen: false,
       text: null,
+      fileTree: null,
+      fileAccessError: false,
     });
   });
 

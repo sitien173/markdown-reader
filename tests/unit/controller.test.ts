@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SaveConflictError } from '../../src/source/file-handle';
+import { useSettingsStore } from '../../src/store/settings-store';
 
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void };
 function deferred<T>(): Deferred<T> {
@@ -18,9 +19,15 @@ const ctl = vi.hoisted(() => ({
   urlRead: undefined as unknown as (url: string) => Promise<string>,
   events: undefined as undefined | { onChange?: () => void },
   fileEvents: undefined as undefined | { onChange?: () => void },
+  dirListings: {} as Record<string, Array<{ name: string; url: string; isDir: boolean }>>,
+  repoRoots: {} as Record<string, string | null>,
+  gitignores: {} as Record<string, string>,
+  dirThrows: {} as Record<string, boolean>,
+  slowDir: {} as Record<string, Deferred<void>>,
 }));
 
-vi.mock('../../src/source/directory', () => {
+vi.mock('../../src/source/directory', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/source/directory')>();
   class DirectorySource {
     currentPath: string | null = null;
     private readToken = 0;
@@ -50,7 +57,7 @@ vi.mock('../../src/source/directory', () => {
       return () => undefined;
     }
   }
-  return { DirectorySource };
+  return { ...actual, DirectorySource };
 });
 vi.mock('../../src/source/url', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/source/url')>();
@@ -72,6 +79,30 @@ vi.mock('../../src/source/watch', async (importOriginal) => {
     },
   };
 });
+vi.mock('../../src/source/file-url', () => {
+  class FileUrlSource {
+    constructor(public baseUrl: string) {}
+    read() {
+      return ctl.urlRead(this.baseUrl);
+    }
+    watch() {
+      return () => undefined;
+    }
+  }
+  return { FileUrlSource };
+});
+
+vi.mock('../../src/source/file-url-tree', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/source/file-url-tree')>();
+  return {
+    ...actual,
+    findRepoRoot: vi.fn(async (url: string) => {
+      const norm = url.endsWith('/') ? url : `${url}/`;
+      return ctl.repoRoots[norm] !== undefined ? ctl.repoRoots[norm] : (ctl.repoRoots[url] ?? actual.findRepoRoot(url));
+    }),
+  };
+});
+
 vi.mock('../../src/store/handles', () => ({ storeHandle: vi.fn(async () => undefined) }));
 vi.mock('../../src/store/recent', () => ({
   addRecentUrl: vi.fn(async () => undefined),
@@ -94,6 +125,34 @@ beforeEach(async () => {
   ctl.urlRead = async (url) => `body of ${url}`;
   ctl.events = undefined;
   ctl.fileEvents = undefined;
+  ctl.dirListings = {};
+  ctl.repoRoots = {};
+  ctl.gitignores = {};
+  ctl.dirThrows = {};
+  ctl.slowDir = {};
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const norm = url.endsWith('/') ? url : `${url}/`;
+      if (ctl.slowDir[norm] || ctl.slowDir[url]) {
+        await (ctl.slowDir[norm] ?? ctl.slowDir[url])!.promise;
+      }
+      if (ctl.dirThrows[norm] || ctl.dirThrows[url]) throw new TypeError('Failed to fetch');
+      if (url.endsWith('/.gitignore')) {
+        const folder = url.slice(0, -'.gitignore'.length);
+        const text = ctl.gitignores[folder] ?? ctl.gitignores[folder.slice(0, -1)] ?? '';
+        return new Response(text, { status: 200 });
+      }
+      const entries = ctl.dirListings[norm] ?? ctl.dirListings[url];
+      if (entries) {
+        const html = entries
+          .map((e) => `<script>addRow(${JSON.stringify(e.name)},${JSON.stringify(e.name)},${e.isDir ? 1 : 0},0,"",0,"");</script>`)
+          .join('\n');
+        return new Response(html, { status: 200 });
+      }
+      return new Response('', { status: 200 });
+    }),
+  );
   const local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) };
   vi.stubGlobal('browser', { storage: { local, session: { get: vi.fn(async () => ({})), remove: vi.fn(async () => undefined) } } });
   window.history.replaceState(null, '', '/');
@@ -381,5 +440,367 @@ describe('controller checkExternal', () => {
     await flush();
     expect(get().externalChange).toBe(true);
     expect(get().text).toBe('v1');
+  });
+});
+
+describe('controller file-url folder tree', () => {
+  const docsUrl = 'file:///workspace/repo/docs/';
+  const subUrl = 'file:///workspace/repo/docs/sub/';
+  const otherUrl = 'file:///workspace/other/';
+
+  beforeEach(() => {
+    ctl.dirListings[docsUrl] = [
+      { name: 'readme.md', url: `${docsUrl}readme.md`, isDir: false },
+      { name: 'sub', url: subUrl, isDir: true },
+      { name: 'image.png', url: `${docsUrl}image.png`, isDir: false },
+      { name: '.dotfile.md', url: `${docsUrl}.dotfile.md`, isDir: false },
+    ];
+    ctl.dirListings[subUrl] = [{ name: 'nested.md', url: `${subUrl}nested.md`, isDir: false }];
+    ctl.dirListings[otherUrl] = [{ name: 'other.md', url: `${otherUrl}other.md`, isDir: false }];
+    ctl.repoRoots[docsUrl] = 'file:///workspace/repo/';
+  });
+
+  it('roots tree at parent folder on load, keeps tree on load inside root, and re-roots outside root', async () => {
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+
+    expect(get().fileTree).not.toBeNull();
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+    expect(get().docPath).toBe('readme.md');
+    expect(get().fileTree?.nodes.map((n) => n.name)).toEqual(['sub', 'readme.md']);
+    expect((get().fileTree?.nodes.find((n) => n.name === 'sub') as any)?.children).toBeNull();
+
+    // Load file inside the current root: tree root is kept
+    await c.load(`${docsUrl}sub/nested.md`);
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+    expect(get().docPath).toBe('sub/nested.md');
+
+    // Load file outside the current root: re-roots tree
+    await c.load(`${otherUrl}other.md`);
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(otherUrl);
+    expect(get().docPath).toBe('other.md');
+  });
+
+  it('expands a folder on expandFolder and sets inline error on failure', async () => {
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    await (c as any).expandFolder('sub');
+
+    const subNode = get().fileTree?.nodes.find((n) => n.name === 'sub') as any;
+    expect(subNode.children).toEqual([{ kind: 'file', name: 'nested.md', path: 'sub/nested.md' }]);
+
+    // Error on failed expand
+    ctl.dirThrows[subUrl] = true;
+    await (c as any).expandFolder('sub');
+    const failedSubNode = get().fileTree?.nodes.find((n) => n.name === 'sub') as any;
+    expect(failedSubNode.error).toBe(true);
+  });
+
+  it('re-roots at parent and grafts loaded subtree on goUp', async () => {
+    const repoUrl = 'file:///workspace/repo/';
+    ctl.dirListings[repoUrl] = [
+      { name: 'docs', url: docsUrl, isDir: true },
+      { name: 'root.md', url: `${repoUrl}root.md`, isDir: false },
+    ];
+
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    await (c as any).expandFolder('sub');
+
+    await (c as any).goUp();
+    expect(get().fileTree?.rootUrl).toBe(repoUrl);
+    expect(get().docPath).toBe('docs/readme.md');
+
+    const docsFolder = get().fileTree?.nodes.find((n) => n.name === 'docs') as any;
+    expect(docsFolder).toBeDefined();
+    expect(docsFolder.path).toBe('docs');
+    expect(docsFolder.children.map((n: any) => n.path)).toEqual(['docs/sub', 'docs/readme.md']);
+    const graftedSub = docsFolder.children.find((n: any) => n.name === 'sub');
+    expect(graftedSub.children[0].path).toBe('docs/sub/nested.md');
+  });
+
+  it('no-ops on goUp when getParentUrl returns null', async () => {
+    const rootFsUrl = 'file:///';
+    ctl.dirListings[rootFsUrl] = [{ name: 'file.md', url: `${rootFsUrl}file.md`, isDir: false }];
+
+    await c.load(`${rootFsUrl}file.md`);
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(rootFsUrl);
+
+    await (c as any).goUp();
+    expect(get().fileTree?.rootUrl).toBe(rootFsUrl);
+  });
+
+  it('clears fileTree on openFileHandle, openFolderHandle, drop, and non-file load', async () => {
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    expect(get().fileTree).not.toBeNull();
+
+    // openFileHandle clears fileTree
+    const fakeFile = fakeFileHandle('test.md', 'content');
+    await c.openFileHandle(fakeFile.handle);
+    expect(get().fileTree).toBeNull();
+
+    // Reopen fileTree
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    expect(get().fileTree).not.toBeNull();
+
+    // openFolderHandle clears fileTree
+    await c.openFolderHandle({ name: 'root' } as FileSystemDirectoryHandle);
+    expect(get().fileTree).toBeNull();
+
+    // Reopen fileTree
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    expect(get().fileTree).not.toBeNull();
+
+    // drop clears fileTree
+    const item = {
+      kind: 'file',
+      getAsFileSystemHandle: async () => fakeFile.handle,
+    } as unknown as DataTransferItem;
+    await c.drop(item);
+    expect(get().fileTree).toBeNull();
+
+    // Reopen fileTree
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    expect(get().fileTree).not.toBeNull();
+
+    // non-file load clears fileTree
+    await c.load('https://example.com/test.md');
+    expect(get().fileTree).toBeNull();
+  });
+
+  it('rebuilds fileTree and refreshes picker tree on settings change', async () => {
+    const unmount = c.mount();
+    try {
+      await c.load(`${docsUrl}readme.md`);
+      await flush();
+      expect(get().fileTree?.nodes.some((n) => n.name === '.dotfile.md')).toBe(false);
+
+      // Toggle showHiddenItems
+      await useSettingsStore.getState().update({ general: { showHiddenItems: true } });
+      await flush();
+      expect(get().fileTree?.nodes.some((n) => n.name === '.dotfile.md')).toBe(true);
+
+      // Switch to directorySource and verify picker refresh
+      await c.openFolderHandle({ name: 'root' } as FileSystemDirectoryHandle);
+      ctl.files['new.md'] = 'new file';
+      await useSettingsStore.getState().update({ general: { showHiddenItems: false } });
+      await flush();
+      expect(get().treeNodes.some((n) => n.name === 'new.md')).toBe(true);
+    } finally {
+      unmount();
+    }
+  });
+
+  it('rejects stale expand result via treeGen after a re-root', async () => {
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+
+    const slowExpand = deferred<void>();
+    ctl.slowDir[subUrl] = slowExpand;
+
+    // Start expanding sub
+    const pendingExpand = (c as any).expandFolder('sub');
+
+    // While in flight, re-root by loading a file in otherUrl
+    await c.load(`${otherUrl}other.md`);
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(otherUrl);
+
+    // Resolve late expand
+    slowExpand.resolve();
+    await pendingExpand;
+
+    // Tree in otherUrl was NOT modified by the stale expand
+    expect(get().fileTree?.rootUrl).toBe(otherUrl);
+    expect(get().fileTree?.nodes.map((n) => n.name)).toEqual(['other.md']);
+  });
+
+  it('recomputes repo root on goUp when leaving the repo and passes relative paths only', async () => {
+    const parentUrl = 'file:///workspace/';
+    const repoUrl = 'file:///workspace/repo/';
+    ctl.repoRoots[repoUrl] = repoUrl;
+    ctl.repoRoots[parentUrl] = null;
+    ctl.dirListings[repoUrl] = [{ name: 'root.md', url: `${repoUrl}root.md`, isDir: false }];
+    ctl.dirListings[parentUrl] = [
+      { name: 'repo', url: repoUrl, isDir: true },
+      { name: 'sibling.md', url: `${parentUrl}sibling.md`, isDir: false },
+    ];
+
+    await c.load(`${repoUrl}root.md`);
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(repoUrl);
+
+    await (c as any).goUp();
+    expect(get().fileTree?.rootUrl).toBe(parentUrl);
+    expect(get().docPath).toBe('repo/root.md');
+    // All node paths must be relative, never full URLs
+    for (const node of get().fileTree!.nodes) {
+      expect(node.path.startsWith('file://')).toBe(false);
+    }
+  });
+
+  it('drops pending re-root when a newer load occurs inside the current tree', async () => {
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+    expect(get().docPath).toBe('readme.md');
+
+    const slowOtherList = deferred<void>();
+    ctl.slowDir[otherUrl] = slowOtherList;
+
+    // Start load outside current tree (triggers re-root)
+    void c.load(`${otherUrl}other.md`);
+
+    // While re-root is pending, load file inside old tree
+    ctl.dirListings[docsUrl] = [
+      { name: 'readme.md', url: `${docsUrl}readme.md`, isDir: false },
+      { name: 'second.md', url: `${docsUrl}second.md`, isDir: false },
+    ];
+    await c.load(`${docsUrl}second.md`);
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+    expect(get().docPath).toBe('second.md');
+
+    // Resolve late re-root for otherUrl
+    slowOtherList.resolve();
+    await flush();
+
+    // Re-root must NOT have overwritten the tree
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+    expect(get().docPath).toBe('second.md');
+  });
+
+  it('does not delay document loading while tree promise is in flight', async () => {
+    const slowTree = deferred<void>();
+    ctl.slowDir[otherUrl] = slowTree;
+
+    const loadPromise = c.load(`${otherUrl}other.md`);
+    await loadPromise;
+
+    // Document text and loading state must be updated immediately
+    expect(get().text).toBe('body of file:///workspace/other/other.md');
+    expect(get().loading).toBe(false);
+
+    slowTree.resolve();
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(otherUrl);
+  });
+
+  it('loads document and roots tree correctly for URLs with spaces, localhost, and fragments without throwing', async () => {
+    const spaceUrl = 'file:///workspace/repo/docs/a%20b/';
+    ctl.dirListings[spaceUrl] = [{ name: 'x.md', url: `${spaceUrl}x.md`, isDir: false }];
+    ctl.repoRoots[spaceUrl] = 'file:///workspace/repo/';
+
+    // Test with raw space in path
+    await c.load('file:///workspace/repo/docs/a b/x.md');
+    await flush();
+    expect(get().text).toBe('body of file:///workspace/repo/docs/a b/x.md');
+    expect(get().fileTree?.rootUrl).toBe(spaceUrl);
+    expect(get().docPath).toBe('x.md');
+
+    // Test with localhost
+    await c.load('file://localhost/workspace/repo/docs/readme.md');
+    await flush();
+    expect(get().text).toBe('body of file://localhost/workspace/repo/docs/readme.md');
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+    expect(get().docPath).toBe('readme.md');
+
+    // Test with fragment/hash
+    await c.load(`${docsUrl}readme.md#heading-1`);
+    await flush();
+    expect(get().text).toBe(`body of ${docsUrl}readme.md#heading-1`);
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+    expect(get().docPath).toBe('readme.md');
+  });
+
+  it('stores repoRoot on fileTree and avoids redundant findRepoRoot on goUp', async () => {
+    const parentUrl = 'file:///workspace/';
+    const repoUrl = 'file:///workspace/repo/';
+    ctl.repoRoots[repoUrl] = repoUrl;
+    ctl.repoRoots[parentUrl] = null;
+    ctl.dirListings[repoUrl] = [{ name: 'root.md', url: `${repoUrl}root.md`, isDir: false }];
+    ctl.dirListings[parentUrl] = [
+      { name: 'repo', url: repoUrl, isDir: true },
+      { name: 'sibling.md', url: `${parentUrl}sibling.md`, isDir: false },
+    ];
+
+    await c.load(`${repoUrl}root.md`);
+    await flush();
+    expect(get().fileTree?.repoRoot).toBe(repoUrl);
+
+    // Up leaves repo: searches repo root and updates fileTree.repoRoot to null
+    await (c as any).goUp();
+    expect(get().fileTree?.rootUrl).toBe(parentUrl);
+    expect(get().fileTree?.repoRoot).toBeNull();
+
+    // Another goUp from parentUrl when repoRoot is null must NOT call findRepoRoot again
+    const rootFsUrl = 'file:///';
+    ctl.dirListings[rootFsUrl] = [{ name: 'workspace', url: parentUrl, isDir: true }];
+    const findRepoRootSpy = vi.spyOn(await import('../../src/source/file-url-tree'), 'findRepoRoot');
+    findRepoRootSpy.mockClear();
+
+    await (c as any).goUp();
+    expect(findRepoRootSpy).not.toHaveBeenCalled();
+    findRepoRootSpy.mockRestore();
+  });
+
+  it('keeps pending re-root winning over settings rebuild', async () => {
+    const unmount = c.mount();
+    try {
+      await c.load(`${docsUrl}readme.md`);
+      await flush();
+      expect(get().fileTree?.rootUrl).toBe(docsUrl);
+
+      const slowOther = deferred<void>();
+      ctl.slowDir[otherUrl] = slowOther;
+
+      // Start re-root by loading other.md
+      void c.load(`${otherUrl}other.md`);
+
+      // While re-root is pending, change a setting
+      await useSettingsStore.getState().update({ general: { showHiddenItems: true } });
+      await flush();
+
+      // Resolve the pending re-root
+      slowOther.resolve();
+      await flush();
+
+      // The new document's tree must be shown, not the old root
+      expect(get().fileTree?.rootUrl).toBe(otherUrl);
+      expect(get().docPath).toBe('other.md');
+    } finally {
+      unmount();
+    }
+  });
+
+  it('drops a goUp started on the old tree when a re-root finishes first', async () => {
+    await c.load(`${docsUrl}readme.md`);
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(docsUrl);
+
+    const slowOther = deferred<void>();
+    ctl.slowDir[otherUrl] = slowOther;
+    const slowRepo = deferred<void>();
+    ctl.slowDir['file:///workspace/repo/'] = slowRepo;
+
+    void c.load(`${otherUrl}other.md`);
+    const up = (c as any).goUp();
+
+    slowOther.resolve();
+    await flush();
+    expect(get().fileTree?.rootUrl).toBe(otherUrl);
+
+    slowRepo.resolve();
+    await up;
+    await flush();
+
+    expect(get().fileTree?.rootUrl).toBe(otherUrl);
+    expect(get().docPath).toBe('other.md');
   });
 });

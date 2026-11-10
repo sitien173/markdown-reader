@@ -2,9 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DirectorySource, type TreeNode } from '../../src/source/directory';
+import { buildTree, DirectorySource, type TreeNode } from '../../src/source/directory';
 import { SaveConflictError } from '../../src/source/file-handle';
 import { MarkdownView, type MarkdownViewHandle } from '../../src/ui/markdown-view';
+import { useSettingsStore } from '../../src/store/settings-store';
 
 class FakeFileSystemFileHandle {
   readonly kind = 'file' as const;
@@ -144,6 +145,150 @@ describe('DirectorySource', () => {
       const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
       const tree = await source.getTree();
       expect(tree.map((n) => n.name)).toEqual(['README.md', 'readme.md']);
+    });
+
+    describe('picker hiding and pruning', () => {
+      beforeEach(() => {
+        useSettingsStore.setState({
+          settings: {
+            ...useSettingsStore.getState().settings,
+            general: {
+              ...useSettingsStore.getState().settings.general,
+              showHiddenItems: false,
+              ignorePatterns: 'node_modules/',
+            },
+          },
+        });
+      });
+
+      afterEach(() => {
+        useSettingsStore.setState({
+          settings: {
+            ...useSettingsStore.getState().settings,
+            general: {
+              ...useSettingsStore.getState().settings.general,
+              showHiddenItems: false,
+              ignorePatterns: 'node_modules/',
+            },
+          },
+        });
+      });
+
+      it('hides dot-items, gitignored entries, and settings-pattern matches by default', async () => {
+        const root = new FakeFileSystemDirectoryHandle('root');
+        root.setFile('visible.md', '# Visible');
+        root.setFile('.hidden.md', '# Hidden');
+        root.setFile('.gitignore', 'ignored.md\nignored-folder/\n');
+        root.setFile('ignored.md', '# Ignored');
+
+        const dotFolder = root.setDirectory('.dotfolder');
+        dotFolder.setFile('inside-dot.md', '# Inside');
+
+        const ignoredFolder = root.setDirectory('ignored-folder');
+        ignoredFolder.setFile('nested.md', '# Nested');
+
+        const nodeModules = root.setDirectory('node_modules');
+        nodeModules.setFile('dep.md', '# Dep');
+
+        const sub = root.setDirectory('sub');
+        sub.setFile('normal.md', '# Normal');
+        sub.setFile('sub-ignored.md', '# Sub ignored');
+        sub.setFile('.gitignore', 'sub-ignored.md\n');
+
+        const emptyDir = root.setDirectory('empty-dir');
+        emptyDir.setFile('not-md.txt', 'not markdown');
+
+        const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
+        const tree = await source.getTree();
+
+        expect(tree.map((n) => n.name)).toEqual(['sub', 'visible.md']);
+        const subNode = tree[0] as { kind: 'directory'; children: TreeNode[] };
+        expect(subNode.children.map((n) => n.name)).toEqual(['normal.md']);
+      });
+
+      it('reveals all hidden items when showHiddenItems is enabled, while still pruning empty folders', async () => {
+        useSettingsStore.setState({
+          settings: {
+            ...useSettingsStore.getState().settings,
+            general: {
+              ...useSettingsStore.getState().settings.general,
+              showHiddenItems: true,
+              ignorePatterns: 'node_modules/',
+            },
+          },
+        });
+
+        const root = new FakeFileSystemDirectoryHandle('root');
+        root.setFile('visible.md', '# Visible');
+        root.setFile('.hidden.md', '# Hidden');
+        root.setFile('.gitignore', 'ignored.md\n');
+        root.setFile('ignored.md', '# Ignored');
+
+        const dotFolder = root.setDirectory('.dotfolder');
+        dotFolder.setFile('inside-dot.md', '# Inside');
+
+        const nodeModules = root.setDirectory('node_modules');
+        nodeModules.setFile('dep.md', '# Dep');
+
+        const emptyDir = root.setDirectory('empty-dir');
+        emptyDir.setFile('not-md.txt', 'not markdown');
+
+        const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
+        const tree = await source.getTree();
+
+        expect(tree.map((n) => n.name)).toEqual(['.dotfolder', 'node_modules', '.hidden.md', 'ignored.md', 'visible.md']);
+        // emptyDir must still be pruned
+        expect(tree.some((n) => n.name === 'empty-dir')).toBe(false);
+      });
+
+      it('respects custom settings ignorePatterns', async () => {
+        useSettingsStore.setState({
+          settings: {
+            ...useSettingsStore.getState().settings,
+            general: {
+              ...useSettingsStore.getState().settings.general,
+              showHiddenItems: false,
+              ignorePatterns: 'custom-ignore/\n*.draft.md',
+            },
+          },
+        });
+
+        const root = new FakeFileSystemDirectoryHandle('root');
+        root.setFile('regular.md', '# Regular');
+        root.setFile('notes.draft.md', '# Draft');
+
+        const customIgnore = root.setDirectory('custom-ignore');
+        customIgnore.setFile('doc.md', '# Doc');
+
+        const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
+        const tree = await source.getTree();
+
+        expect(tree.map((n) => n.name)).toEqual(['regular.md']);
+      });
+
+      it('buildTree can be called directly with required settings', async () => {
+        const root = new FakeFileSystemDirectoryHandle('root');
+        root.setFile('doc.md', '# Doc');
+        const tree = await buildTree(root as unknown as FileSystemDirectoryHandle, '', [], {
+          showHiddenItems: false,
+          ignorePatterns: 'node_modules/',
+        });
+        expect(tree.map((n) => n.name)).toEqual(['doc.md']);
+      });
+
+      it('skips reading .gitignore when showHiddenItems is on', async () => {
+        const root = new FakeFileSystemDirectoryHandle('root');
+        root.setFile('doc.md', '# Doc');
+        root.setFile('.gitignore', 'ignored.md\n');
+        const getFileHandleSpy = vi.spyOn(root, 'getFileHandle');
+
+        await buildTree(root as unknown as FileSystemDirectoryHandle, '', [], {
+          showHiddenItems: true,
+          ignorePatterns: 'node_modules/',
+        });
+
+        expect(getFileHandleSpy).not.toHaveBeenCalledWith('.gitignore');
+      });
     });
   });
 

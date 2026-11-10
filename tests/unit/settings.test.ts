@@ -16,6 +16,8 @@ describe('settings schema and parsing', () => {
       autoRefreshIntervalSec: 1,
       charsetCompat: false,
       language: 'en-US',
+      showHiddenItems: false,
+      ignorePatterns: 'node_modules/',
     });
 
     // Appearance defaults
@@ -88,6 +90,34 @@ describe('settings schema and parsing', () => {
     };
     const parsed = parseSettings(raw);
     expect(parsed.general.autoRefreshIntervalSec).toBe(1);
+    expect(parsed.general.enabled).toBe(false);
+  });
+
+  it('applies per-field fallback for invalid general.showHiddenItems', () => {
+    const raw = {
+      ...defaultSettings,
+      general: {
+        ...defaultSettings.general,
+        showHiddenItems: 'invalid-boolean',
+        enabled: false,
+      },
+    };
+    const parsed = parseSettings(raw);
+    expect(parsed.general.showHiddenItems).toBe(false);
+    expect(parsed.general.enabled).toBe(false);
+  });
+
+  it('applies per-field fallback for invalid general.ignorePatterns', () => {
+    const raw = {
+      ...defaultSettings,
+      general: {
+        ...defaultSettings.general,
+        ignorePatterns: 12345,
+        enabled: false,
+      },
+    };
+    const parsed = parseSettings(raw);
+    expect(parsed.general.ignorePatterns).toBe('node_modules/');
     expect(parsed.general.enabled).toBe(false);
   });
 

@@ -44,7 +44,7 @@ interface EntryGroup {
 }
 
 function flattenFiles(nodes: TreeNode[]): string[] {
-  return nodes.flatMap((n) => (n.kind === 'file' ? [n.path] : flattenFiles(n.children)));
+  return nodes.flatMap((n) => (n.kind === 'file' ? [n.path] : flattenFiles(n.children ?? [])));
 }
 
 export function CommandPalette({ open, onOpenChange, ...rest }: CommandPaletteProps) {

@@ -1,4 +1,4 @@
-import { DirectorySource, type FileNode, type TreeNode } from '../source/directory';
+import { compareTreeNodes, DirectorySource, type FileNode, type TreeNode } from '../source/directory';
 import { dropFileIdentity, FileHandleSource, isValidMarkdownFile, SaveConflictError } from '../source/file-handle';
 import { usableCapturedText } from '../source/captured-text';
 import { FileUrlSource } from '../source/file-url';
@@ -8,6 +8,17 @@ import { createDraftSaver, draftKey, loadDraft } from '../store/drafts';
 import { storeHandle } from '../store/handles';
 import { addRecentUrl, getRecentEntries, type RecentItem } from '../store/recent';
 import { useSettingsStore } from '../store/settings-store';
+import {
+  buildFileTreeLevel,
+  type FileUrlEntry,
+  findRepoRoot,
+  getParentUrl,
+  getRelPath,
+  GitignoreCache,
+  listDirectory,
+  normalizeDirUrl,
+  prefixTreeNodes,
+} from '../source/file-url-tree';
 import { createReaderStore, type Mode, type ReaderStore } from '../store/reader-store';
 
 type Active = FileHandleSource | FileUrlSource | UrlSource | DirectorySource;
@@ -16,7 +27,7 @@ function findFirstFile(nodes: TreeNode[]): FileNode | null {
   for (const node of nodes) {
     if (node.kind === 'file') return node;
     if (node.kind === 'directory') {
-      const found = findFirstFile(node.children);
+      const found = findFirstFile(node.children ?? []);
       if (found) return found;
     }
   }
@@ -46,9 +57,12 @@ export function createController(store: ReaderStore = createReaderStore(), notif
   let sourceId = '';
   let sourceGen = 0;
   let treeGen = 0;
+  let reRootGen = 0;
+  let treeVersion = 0;
   let active: Active | null = null;
   let unwatch: (() => void) | null = null;
   let stamp: number | null = null;
+  const gitignoreCache = new GitignoreCache();
   let disposed = false;
   let started = false;
 
@@ -273,9 +287,84 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       set({ error: 'This URL scheme is not supported', text: null });
       return;
     }
+
+    const isFile = parsed.protocol === 'file:';
+    let fileTreeDocPath: string | null = null;
+    if (isFile) {
+      try {
+        const u = new URL(url);
+        u.hash = '';
+        u.search = '';
+        const fileUrl = u.href;
+        const currentTree = state().fileTree;
+        const isInside = currentTree && fileUrl.startsWith(normalizeDirUrl(currentTree.rootUrl));
+        if (isInside) {
+          ++reRootGen;
+          fileTreeDocPath = getRelPath(fileUrl, currentTree.rootUrl);
+          set({ docPath: fileTreeDocPath, fileAccessError: false });
+        } else {
+          const parentUrl = new URL('.', fileUrl).href;
+          const docRelPath = getRelPath(fileUrl, parentUrl);
+          const rGen = ++reRootGen;
+          void (async () => {
+            let rootEntries: FileUrlEntry[];
+            try {
+              rootEntries = await listDirectory(parentUrl);
+            } catch {
+              if (gen !== sourceGen || rGen !== reRootGen) return;
+              ++treeGen;
+              set({ fileTree: null, fileAccessError: true, docPath: null });
+              return;
+            }
+            if (gen !== sourceGen || rGen !== reRootGen) return;
+
+            let repoRoot: string | null = null;
+            try {
+              repoRoot = await findRepoRoot(parentUrl, rootEntries);
+            } catch {
+              // ignore climb errors
+            }
+            if (gen !== sourceGen || rGen !== reRootGen) return;
+
+            try {
+              gitignoreCache.clear();
+              const chainBase = repoRoot ?? parentUrl;
+              const settings = useSettingsStore.getState().settings.general;
+              const nodes = await buildFileTreeLevel(parentUrl, parentUrl, chainBase, gitignoreCache, settings, rootEntries);
+              if (gen !== sourceGen || rGen !== reRootGen) return;
+              // Invalidates expands, Up and rebuilds still running on the old tree.
+              ++treeGen;
+              set({
+                fileTree: { rootUrl: parentUrl, nodes, repoRoot },
+                fileAccessError: false,
+                docPath: docRelPath,
+              });
+            } catch {
+              if (gen !== sourceGen || rGen !== reRootGen) return;
+              ++treeGen;
+              set({ fileTree: null, fileAccessError: false, docPath: null });
+            }
+          })();
+        }
+      } catch {
+        fileTreeDocPath = null;
+      }
+    } else {
+      ++treeGen;
+      ++reRootGen;
+      set({ fileTree: null, fileAccessError: false });
+    }
+
     stopWatch();
     active = null;
-    set({ writable: false, externalChange: false, directorySource: null, docPath: null, headings: [], source: url });
+    set({
+      writable: false,
+      externalChange: false,
+      directorySource: null,
+      docPath: fileTreeDocPath,
+      headings: [],
+      source: url,
+    });
     window.history.replaceState(null, '', `?src=${encodeURIComponent(url)}&mode=${state().mode}`);
     set({ loading: true, error: '', text: null });
     try {
@@ -317,7 +406,9 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       if (!isCurrent(gen, previous, previousId)) return;
       stopWatch();
       active = null;
-      set({ writable: false, externalChange: false, directorySource: null, docPath: null });
+      ++treeGen;
+      ++reRootGen;
+      set({ writable: false, externalChange: false, directorySource: null, docPath: null, fileTree: null, fileAccessError: false });
       stamp = diskStamp;
       setActive(picked);
       set({ source: '' });
@@ -357,6 +448,8 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       const first = findFirstFile(tree);
       stopWatch();
       active = null;
+      ++treeGen;
+      ++reRootGen;
       set({
         writable: false,
         externalChange: false,
@@ -365,6 +458,8 @@ export function createController(store: ReaderStore = createReaderStore(), notif
         source: '',
         error: '',
         headings: [],
+        fileTree: null,
+        fileAccessError: false,
       });
 
       if (first) {
@@ -452,9 +547,11 @@ export function createController(store: ReaderStore = createReaderStore(), notif
         if (!isCurrent(gen, previous, previousId)) return;
         stopWatch();
         active = null;
+        ++treeGen;
+        ++reRootGen;
         set({ writable: false, externalChange: false });
         setActive(null);
-        set({ directorySource: null, docPath: null, headings: [] });
+        set({ directorySource: null, docPath: null, headings: [], fileTree: null, fileAccessError: false });
         applyText(value, dropFileIdentity(file), file.name);
         set({ source: '', error: '' });
       }
@@ -482,6 +579,114 @@ export function createController(store: ReaderStore = createReaderStore(), notif
     window.history.replaceState(null, '', url.toString());
   }
 
+  async function expandFolder(path: string) {
+    const currentTree = state().fileTree;
+    if (!currentTree) return;
+    const gen = treeGen;
+    const rootUrl = currentTree.rootUrl;
+    const chainBase = currentTree.repoRoot ?? rootUrl;
+    const folderUrl = new URL(`${path.split('/').map(encodeURIComponent).join('/')}/`, rootUrl).href;
+    const settings = useSettingsStore.getState().settings.general;
+
+    try {
+      const children = await buildFileTreeLevel(folderUrl, rootUrl, chainBase, gitignoreCache, settings);
+      if (gen !== treeGen || !state().fileTree || state().fileTree?.rootUrl !== rootUrl) return;
+      const updateNodes = (nodes: TreeNode[]): TreeNode[] => {
+        return nodes.map((node) => {
+          if (node.path === path && node.kind === 'directory') {
+            return { ...node, children, error: undefined };
+          }
+          if (node.kind === 'directory' && node.children && path.startsWith(`${node.path}/`)) {
+            return { ...node, children: updateNodes(node.children) };
+          }
+          return node;
+        });
+      };
+      set({
+        fileTree: {
+          rootUrl,
+          nodes: updateNodes(state().fileTree!.nodes),
+          repoRoot: currentTree.repoRoot,
+          version: currentTree.version,
+        },
+      });
+    } catch {
+      if (gen !== treeGen || !state().fileTree || state().fileTree?.rootUrl !== rootUrl) return;
+      const markError = (nodes: TreeNode[]): TreeNode[] => {
+        return nodes.map((node) => {
+          if (node.path === path && node.kind === 'directory') {
+            return { ...node, children: [], error: true };
+          }
+          if (node.kind === 'directory' && node.children && path.startsWith(`${node.path}/`)) {
+            return { ...node, children: markError(node.children) };
+          }
+          return node;
+        });
+      };
+      set({
+        fileTree: {
+          rootUrl,
+          nodes: markError(state().fileTree!.nodes),
+          repoRoot: currentTree.repoRoot,
+          version: currentTree.version,
+        },
+      });
+    }
+  }
+
+  async function goUp() {
+    const currentTree = state().fileTree;
+    if (!currentTree) return;
+    const parentUrl = getParentUrl(currentTree.rootUrl);
+    if (!parentUrl) return;
+    const gen = ++treeGen;
+
+    const folderName = decodeURIComponent(currentTree.rootUrl.slice(parentUrl.length)).replace(/\/+$/, '');
+    let newRepoRoot: string | null = currentTree.repoRoot ?? null;
+    if (newRepoRoot !== null && !parentUrl.startsWith(normalizeDirUrl(newRepoRoot))) {
+      const foundRepoRoot = await findRepoRoot(parentUrl);
+      if (gen !== treeGen) return;
+      newRepoRoot = foundRepoRoot;
+      gitignoreCache.clear();
+    }
+    const chainBase = newRepoRoot ?? parentUrl;
+    const settings = useSettingsStore.getState().settings.general;
+
+    try {
+      const parentNodes = await buildFileTreeLevel(parentUrl, parentUrl, chainBase, gitignoreCache, settings);
+      if (gen !== treeGen) return;
+
+      const rePrefixedChildren = prefixTreeNodes(currentTree.nodes, folderName);
+      let grafted = false;
+      const graftedNodes = parentNodes.map((node) => {
+        if (node.kind === 'directory' && node.name === folderName) {
+          grafted = true;
+          return { ...node, children: rePrefixedChildren };
+        }
+        return node;
+      });
+
+      if (!grafted) {
+        graftedNodes.push({
+          kind: 'directory',
+          name: folderName,
+          path: folderName,
+          children: rePrefixedChildren,
+        });
+        graftedNodes.sort(compareTreeNodes);
+      }
+
+      const currentDocPath = state().docPath;
+      const nextDocPath = currentDocPath ? `${folderName}/${currentDocPath}` : null;
+      set({
+        fileTree: { rootUrl: parentUrl, nodes: graftedNodes, repoRoot: newRepoRoot },
+        docPath: nextDocPath,
+      });
+    } catch {
+      // Ignore parent listing error
+    }
+  }
+
   /** Stops the watcher and draft saver and drops in-flight work. Safe to follow with mount(), as StrictMode does. */
   function dispose() {
     disposed = true;
@@ -502,6 +707,32 @@ export function createController(store: ReaderStore = createReaderStore(), notif
         a.autoRefreshIntervalSec !== b.autoRefreshIntervalSec
       )
         startWatch();
+      if (a.showHiddenItems !== b.showHiddenItems || a.ignorePatterns !== b.ignorePatterns) {
+        if (active instanceof DirectorySource) {
+          const gen = ++treeGen;
+          const currentActive = active;
+          void currentActive
+            .getTree()
+            .then((t) => {
+              if (gen !== treeGen || active !== currentActive) return;
+              set({ treeNodes: t });
+            })
+            .catch(() => undefined);
+        }
+        const currentTree = state().fileTree;
+        if (currentTree) {
+          gitignoreCache.clear();
+          const gen = ++treeGen;
+          const rootUrl = currentTree.rootUrl;
+          const chainBase = currentTree.repoRoot ?? rootUrl;
+          void buildFileTreeLevel(rootUrl, rootUrl, chainBase, gitignoreCache, a)
+            .then((nodes) => {
+              if (gen !== treeGen || !state().fileTree || state().fileTree?.rootUrl !== rootUrl) return;
+              set({ fileTree: { rootUrl, nodes, repoRoot: currentTree.repoRoot, version: ++treeVersion } });
+            })
+            .catch(() => undefined);
+        }
+      }
     });
     if (!started) {
       started = true;
@@ -537,6 +768,8 @@ export function createController(store: ReaderStore = createReaderStore(), notif
     edit,
     setMode,
     getDraft: () => draft,
+    expandFolder,
+    goUp,
   };
 }
 

@@ -16,6 +16,8 @@ export type Settings = {
     autoRefreshIntervalSec: number;
     charsetCompat: boolean;
     language: 'en-US';
+    showHiddenItems: boolean;
+    ignorePatterns: string;
   };
   appearance: {
     textSize: number;
@@ -65,6 +67,8 @@ export const defaultSettings: Settings = {
     autoRefreshIntervalSec: 1,
     charsetCompat: false,
     language: 'en-US',
+    showHiddenItems: false,
+    ignorePatterns: 'node_modules/',
   },
   appearance: {
     textSize: 3,
@@ -118,6 +122,8 @@ const generalSchema = z.object({
   ),
   charsetCompat: z.catch(z.boolean(), defaultSettings.general.charsetCompat),
   language: z.catch(z.literal('en-US'), defaultSettings.general.language),
+  showHiddenItems: z.catch(z.boolean(), defaultSettings.general.showHiddenItems),
+  ignorePatterns: z.catch(z.string(), defaultSettings.general.ignorePatterns),
 });
 
 const appearanceSchema = z.object({

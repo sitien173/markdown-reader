@@ -16,6 +16,9 @@ export const enUS = {
     copied: 'Copied',
     copyFailed: 'Copy failed',
     fullscreenRefused: 'The browser refused the fullscreen request.',
+    upOneLevel: 'Up one level',
+    fileAccessHint: 'Allow access to file URLs must be enabled.',
+    couldNotReadFolder: 'Could not read folder',
   },
   settings: {
     title: 'Settings',
@@ -58,6 +61,11 @@ export const enUS = {
       charsetCompat: 'Charset compatibility',
       charsetCompatDescription:
         'Detect the text encoding of files that are not UTF-8, such as windows-1252. Applies when a document is reopened.',
+      showHiddenItems: 'Show hidden and ignored items',
+      showHiddenItemsDescription: 'Show dot-items, files ignored by .gitignore, and custom ignore patterns in folder trees.',
+      ignorePatterns: 'Ignore patterns',
+      ignorePatternsDescription: 'Multi-line gitignore-syntax patterns to hide from folder trees.',
+      ignorePatternsField: 'Ignore patterns in gitignore syntax',
       language: 'Language',
       languageDescription: 'The interface language.',
       languageEnglish: 'English (US)',

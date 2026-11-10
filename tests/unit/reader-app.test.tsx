@@ -23,15 +23,36 @@ const ctl = vi.hoisted(() => ({
   recents: [] as unknown[],
   permission: undefined as unknown as () => Promise<string>,
   unwatch: undefined as unknown as () => void,
+  dirListings: {} as Record<string, Array<{ name: string; url: string; isDir: boolean }>>,
+  repoRoots: {} as Record<string, string | null>,
+  dirThrows: {} as Record<string, boolean>,
 }));
 
-vi.mock('../../src/source/directory', () => {
+vi.mock('../../src/source/file-url-tree', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/source/file-url-tree')>();
+  return {
+    ...actual,
+    listDirectory: vi.fn(async (url: string) => {
+      const norm = url.endsWith('/') ? url : `${url}/`;
+      if (ctl.dirThrows?.[norm] || ctl.dirThrows?.[url]) throw new Error('Directory access failed');
+      return ctl.dirListings?.[norm] ?? ctl.dirListings?.[url] ?? [];
+    }),
+    findRepoRoot: vi.fn(async (url: string) => {
+      const norm = url.endsWith('/') ? url : `${url}/`;
+      return ctl.repoRoots?.[norm] !== undefined ? ctl.repoRoots?.[norm] : (ctl.repoRoots?.[url] ?? null);
+    }),
+    fetchGitignore: vi.fn(async () => ''),
+  };
+});
+
+vi.mock('../../src/source/directory', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/source/directory')>();
   class DirectorySource {
     currentPath: string | null = null;
     private readToken = 0;
     constructor(public root: unknown) {}
     async getTree() {
-      return Object.keys(ctl.files).map((path) => ({ kind: 'file', name: path, path, handle: {} }));
+      return Object.keys(ctl.files).map((path) => ({ kind: 'file', name: path, path }));
     }
     get identity() {
       return `folder:root:${this.currentPath ?? ''}`;
@@ -55,7 +76,7 @@ vi.mock('../../src/source/directory', () => {
       return ctl.unwatch;
     }
   }
-  return { DirectorySource };
+  return { ...actual, DirectorySource };
 });
 vi.mock('../../src/store/handles', () => ({
   storeHandle: vi.fn(async () => undefined),
@@ -132,6 +153,24 @@ beforeEach(async () => {
   ctl.recents = [];
   ctl.permission = async () => 'granted';
   ctl.unwatch = vi.fn();
+  ctl.dirListings = {};
+  ctl.repoRoots = {};
+  ctl.dirThrows = {};
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const norm = url.endsWith('/') ? url : `${url}/`;
+      if (ctl.dirThrows?.[norm] || ctl.dirThrows?.[url]) throw new TypeError('Directory access failed');
+      const entries = ctl.dirListings?.[norm] ?? ctl.dirListings?.[url];
+      if (entries) {
+        const html = entries
+          .map((e) => `<script>addRow(${JSON.stringify(e.name)},${JSON.stringify(e.name)},${e.isDir ? 1 : 0},0,"",0,"");</script>`)
+          .join('\n');
+        return new Response(html, { status: 200 });
+      }
+      return new Response(`# Content of ${url}`);
+    }),
+  );
   const local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) };
   vi.stubGlobal('browser', { storage: { local, session: { get: vi.fn(async () => ({})), remove: vi.fn(async () => undefined) } } });
   (window as unknown as { showDirectoryPicker: unknown }).showDirectoryPicker = vi.fn(async () => ({ name: 'root' }));
@@ -324,5 +363,106 @@ describe('reader App store scope and StrictMode', () => {
       root.render(<div />);
     });
     expect(ctl.unwatch).toHaveBeenCalled();
+  });
+});
+
+describe('reader App file-url tree UI', () => {
+  const docsUrl = 'file:///workspace/project/docs/';
+  const subUrl = 'file:///workspace/project/docs/sub/';
+
+  it('renders root folder name and Up button in FilesPanel, disabled at filesystem root', async () => {
+    ctl.dirListings[docsUrl] = [{ name: 'readme.md', url: `${docsUrl}readme.md`, isDir: false }];
+    window.history.replaceState(null, '', `/?src=${encodeURIComponent(`${docsUrl}readme.md`)}&mode=read`);
+    await act(async () => {
+      root.render(<App key="file-tree-header" />);
+    });
+    await flush();
+    await showFilesTab();
+
+    expect(byText('.reader-folder-actions span', 'docs')).toBeTruthy();
+    const upBtn = container.querySelector<HTMLButtonElement>('button[aria-label="Up one level"]');
+    expect(upBtn).toBeTruthy();
+    expect(upBtn?.disabled).toBe(false);
+
+    // Now test at filesystem root
+    const rootFsUrl = 'file:///';
+    ctl.dirListings[rootFsUrl] = [{ name: 'root.md', url: `${rootFsUrl}root.md`, isDir: false }];
+    window.history.replaceState(null, '', `/?src=${encodeURIComponent(`${rootFsUrl}root.md`)}&mode=read`);
+    await act(async () => {
+      root.render(<App key="file-tree-fs-root" />);
+    });
+    await flush();
+    await showFilesTab();
+
+    const upBtnAtRoot = container.querySelector<HTMLButtonElement>('button[aria-label="Up one level"]');
+    expect(upBtnAtRoot).toBeTruthy();
+    expect(upBtnAtRoot?.disabled).toBe(true);
+  });
+
+  it('loads clicked file from fileTree', async () => {
+    ctl.dirListings[docsUrl] = [
+      { name: 'readme.md', url: `${docsUrl}readme.md`, isDir: false },
+      { name: 'other.md', url: `${docsUrl}other.md`, isDir: false },
+    ];
+    window.history.replaceState(null, '', `/?src=${encodeURIComponent(`${docsUrl}readme.md`)}&mode=read`);
+    await act(async () => {
+      root.render(<App key="file-click" />);
+    });
+    await flush();
+    await showFilesTab();
+
+    await click(byText('button', 'other.md'));
+    expect(byText('[data-testid="markdown"]', `# Content of ${docsUrl}other.md`)).toBeTruthy();
+  });
+
+  it('expands unloaded folder on open and renders children', async () => {
+    ctl.dirListings[docsUrl] = [
+      { name: 'readme.md', url: `${docsUrl}readme.md`, isDir: false },
+      { name: 'sub', url: subUrl, isDir: true },
+    ];
+    ctl.dirListings[subUrl] = [{ name: 'nested.md', url: `${subUrl}nested.md`, isDir: false }];
+    window.history.replaceState(null, '', `/?src=${encodeURIComponent(`${docsUrl}readme.md`)}&mode=read`);
+    await act(async () => {
+      root.render(<App key="folder-expand" />);
+    });
+    await flush();
+    await showFilesTab();
+
+    expect(byText('span', 'nested.md')).toBeFalsy();
+    const toggleBtn = container.querySelector<HTMLButtonElement>('button[aria-label="Toggle sub"]');
+    expect(toggleBtn).toBeTruthy();
+    await click(toggleBtn!);
+    expect(byText('span', 'nested.md')).toBeTruthy();
+  });
+
+  it('renders inline error when expandFolder fails', async () => {
+    ctl.dirListings[docsUrl] = [
+      { name: 'readme.md', url: `${docsUrl}readme.md`, isDir: false },
+      { name: 'sub', url: subUrl, isDir: true },
+    ];
+    ctl.dirThrows[subUrl] = true;
+    window.history.replaceState(null, '', `/?src=${encodeURIComponent(`${docsUrl}readme.md`)}&mode=read`);
+    await act(async () => {
+      root.render(<App key="expand-error" />);
+    });
+    await flush();
+    await showFilesTab();
+
+    const toggleBtn = container.querySelector<HTMLButtonElement>('button[aria-label="Toggle sub"]');
+    await click(toggleBtn!);
+    expect(byText('[data-slot="file-tree-error"]', 'Could not read folder')).toBeTruthy();
+  });
+
+  it('shows file access hint when file access is off', async () => {
+    ctl.dirThrows[docsUrl] = true;
+    window.history.replaceState(null, '', `/?src=${encodeURIComponent(`${docsUrl}readme.md`)}&mode=read`);
+    await act(async () => {
+      root.render(<App key="access-off" />);
+    });
+    await flush();
+    await showFilesTab();
+
+    expect(byText('p', 'No folder opened.')).toBeTruthy();
+    expect(byText('p', 'Allow access to file URLs must be enabled.')).toBeTruthy();
   });
 });

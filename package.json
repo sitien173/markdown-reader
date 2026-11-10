@@ -27,6 +27,7 @@
     "codemirror": "6.0.2",
     "dompurify": "3.4.17",
     "idb-keyval": "6.3.0",
+    "ignore": "7.0.14",
     "katex": "0.19.1",
     "lucide-react": "1.68.0",
     "markdown-it": "15.0.3",
