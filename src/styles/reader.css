@@ -244,12 +244,12 @@ nav > .nav-list {
 }
 .nav-item--active {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: var(--primary);
+  color: var(--foreground);
   font-weight: 500;
 }
 .nav-item--active:hover {
   background: color-mix(in srgb, var(--primary) 18%, transparent);
-  color: var(--primary);
+  color: var(--foreground);
 }
 .nav-item--active .nav-file-icon {
   color: var(--primary);
@@ -399,7 +399,8 @@ nav > .nav-list {
   .reader-body,
   .reader-toc,
   .reader-content,
-  .nav-caret {
+  .nav-caret,
+  .nav-item {
     transition: none;
     scroll-behavior: auto;
   }
