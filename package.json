@@ -2,6 +2,7 @@
   "name": "markdown-reader",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@11.22.0",
   "type": "module",
   "scripts": {
