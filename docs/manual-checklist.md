@@ -73,3 +73,13 @@ Native File System Access API pickers, persistent handle permission re-prompting
      - **Overwrite**: forces writing local draft over disk file.
      - **Reload from disk**: discards local draft and reloads disk content.
      - **Cancel**: closes dialog without modifying disk.
+
+## 5. JSON Preview
+
+Headless runs cannot drive the native file picker, drag-and-drop, or saving to disk, and the end-to-end suite runs Chromium only. Verify these by hand.
+
+1. **Picker and drop download names.** Open a `.json` file through **Open file**, then click **Download**. Verify the saved file keeps the source name, for example `report.json`, not `document.json`. Repeat by dragging a `.jsonc` file onto the reader window.
+2. **Download contents match the view.** With a `.jsonc` file open, verify the download is named `.jsonc` while comments remain, and `.json` once **Strip comments** or **Minify** removes them. Open each saved file and verify it matches what the view showed at the moment of download.
+3. **Toolbar reset between documents.** Open a `.json` file, set a non-default layout such as **Minify**, then open a different `.json` file through the picker. Verify the toolbar resets to the open rule rather than keeping the previous document's setting. Edit the first file on disk and verify auto-refresh keeps the toolbar setting.
+4. **Firefox auto-redirect.** In Firefox with the extension loaded, open a remote `.json` URL with the redirect setting ON and verify the reader takes over. Turn the setting OFF and verify the raw document loads untouched. Chromium covers this in `tests/e2e/json-preview.spec.ts`; Firefox is not in the end-to-end matrix.
+5. **Parse error banner.** Open a malformed `.json` file and verify the banner reports the line and column, the source still renders beneath it, and the toolbar is disabled. Open a valid Markdown document next and verify the banner is gone.

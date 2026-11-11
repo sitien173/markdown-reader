@@ -290,8 +290,9 @@ export class DirectorySource implements Source {
     if (isOutside) {
       if (fallbackBaseUrl) {
         try {
-          const resolved = new URL(href, fallbackBaseUrl).href;
-          const isMd = /\.(?:md|markdown)$/i.test(new URL(resolved).pathname) || isJsonName(new URL(resolved).pathname);
+          const url = new URL(href, fallbackBaseUrl);
+          const resolved = url.href;
+          const isMd = /\.(?:md|markdown)$/i.test(url.pathname) || isJsonName(url.pathname);
           return { href: resolved, isMd };
         } catch {
           return { href: '', isMd: false, disabled: true };

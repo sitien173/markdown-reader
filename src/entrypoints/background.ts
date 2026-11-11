@@ -35,7 +35,7 @@ export default defineBackground(() => {
     const url = info.linkUrl;
     if (!url || !isMarkdownLink(url, (await readGeneralFlags()).renderTxt, true)) {
       await browser.action.setBadgeText({ text: '!' });
-      await browser.action.setTitle({ title: 'Markdown Reader: this link is not a supported Markdown URL' });
+      await browser.action.setTitle({ title: 'Markdown Reader: this link is not a supported Markdown or JSON URL' });
       return;
     }
     await browser.action.setBadgeText({ text: '' });
