@@ -28,6 +28,8 @@ import { RecentSection } from '../../ui/recent-section';
 import { type Heading, pluginKey } from '../../render/pipeline';
 import { useSettingsStore } from '../../store/settings-store';
 import { MarkdownView } from '../../ui/markdown-view';
+import { JsonView } from '../../ui/json-view';
+import type { JsonParseError } from '../../lib/json-document';
 import { Toolbar } from '../../ui/toolbar';
 import { ReaderMenu } from '../../ui/reader-menu';
 import { AboutDialog } from '../../ui/about-dialog';
@@ -231,8 +233,9 @@ function FloatingControls({ commands }: { commands: Command[] }) {
 
 function Banners({ controller }: { controller: ReaderController }) {
   const error = useReaderStore((s) => s.error);
+  const parseError = useReaderStore((s) => s.parseError);
   const externalChange = useReaderStore((s) => s.externalChange);
-  const banners = useMemo(() => selectBanners({ error, externalChange }), [error, externalChange]);
+  const banners = useMemo(() => selectBanners({ error, parseError, externalChange }), [error, parseError, externalChange]);
   return (
     <StatusBanner
       banners={banners}
@@ -470,8 +473,9 @@ function Content({
   viewRef: React.RefObject<MarkdownViewHandle | null>;
   run: RunCommand;
 }) {
-  const { mode, mountText, loadId, source, loading, directorySource, docPath } = useReaderStore(
+  const { docKind, mode, mountText, loadId, source, loading, directorySource, docPath } = useReaderStore(
     useShallow((s) => ({
+      docKind: s.docKind,
       mode: s.mode,
       mountText: s.mountText,
       loadId: s.loadId,
@@ -485,6 +489,12 @@ function Content({
   const pluginConfigKey = useMemo(() => pluginKey(plugins), [plugins]);
   const hasText = useDocumentReveal(controller.store);
   const setHeadings = useCallback((headings: Heading[]) => controller.store.setState({ headings }), [controller]);
+  const onParseError = useCallback(
+    (parseError: JsonParseError | null) => {
+      controller.store.setState({ parseError });
+    },
+    [controller],
+  );
   const onEdit = useCallback(
     (value: string) => {
       controller.edit(value);
@@ -512,28 +522,33 @@ function Content({
     if (id) document.getElementById(id)?.scrollIntoView({ behavior: scrollBehavior() });
   }
 
+  const isJson = docKind === 'json' || docKind === 'jsonc';
+
   return (
     // Delegated handler for Markdown links, which are natively keyboard-operable; the section itself is not interactive.
     // biome-ignore lint/a11y/noStaticElementInteractions: event delegation for links inside rendered Markdown
     // biome-ignore lint/a11y/useKeyWithClickEvents: links handle their own keyboard activation, which bubbles as click
     <section data-slot="reader-content" className="reader-content" onClick={onContentClick}>
       {loading ? (
-        <Spinner aria-label="Loading Markdown" />
+        <Spinner aria-label={isJson ? 'Loading' : 'Loading Markdown'} />
       ) : hasText ? (
         <div className={`reader-panes reader-panes--${mode}`}>
           {mode !== 'read' && <EditorPane key={loadId} initialText={controller.getDraft()} onChange={onEdit} />}
-          {mode !== 'edit' && (
-            <MarkdownView
-              ref={viewRef}
-              text={mountText}
-              baseUrl={source}
-              onHeadings={setHeadings}
-              directorySource={directorySource}
-              docPath={docPath}
-              plugins={plugins}
-              pluginKey={pluginConfigKey}
-            />
-          )}
+          {mode !== 'edit' &&
+            (isJson ? (
+              <JsonView ref={viewRef} text={mountText} kind={docKind} onParseError={onParseError} />
+            ) : (
+              <MarkdownView
+                ref={viewRef}
+                text={mountText}
+                baseUrl={source}
+                onHeadings={setHeadings}
+                directorySource={directorySource}
+                docPath={docPath}
+                plugins={plugins}
+                pluginKey={pluginConfigKey}
+              />
+            ))}
         </div>
       ) : (
         <ConnectedWelcome controller={controller} run={run} />

@@ -23,6 +23,7 @@ describe('reader store', () => {
       sidebarTab: 'contents',
       focusMode: false,
       error: '',
+      parseError: null,
       externalChange: false,
       conflict: false,
       dirty: false,
@@ -77,6 +78,18 @@ describe('store scope', () => {
 });
 
 describe('banners selector', () => {
+  it('lists error then jsonError then external change when all are set', () => {
+    store.setState({
+      externalChange: true,
+      error: 'Boom',
+      parseError: { message: 'Invalid token', line: 1, column: 2 },
+    });
+    expect(selectBanners(get())).toEqual([
+      { kind: 'error', message: 'Boom' },
+      { kind: 'jsonError', message: 'Invalid token', line: 1, column: 2 },
+      { kind: 'externalChange' },
+    ]);
+  });
   it('lists error then external change when both are set', () => {
     store.setState({ externalChange: true, error: 'Boom' });
     expect(selectBanners(get())).toEqual([{ kind: 'error', message: 'Boom' }, { kind: 'externalChange' }]);

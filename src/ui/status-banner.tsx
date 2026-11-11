@@ -25,6 +25,12 @@ export function StatusBanner({ banners, onRetry, onDismissError, onReload }: Sta
               Dismiss
             </Button>
           </Alert>
+        ) : banner.kind === 'jsonError' ? (
+          <Alert key="jsonError" variant="destructive" className="flex items-center gap-3">
+            <span className="flex-1">
+              {banner.message === 'Empty document' ? banner.message : `${banner.message} (line ${banner.line}, column ${banner.column})`}
+            </span>
+          </Alert>
         ) : (
           <Alert key="externalChange" role="status" className="flex items-center gap-3">
             <span className="flex-1">File changed on disk</span>

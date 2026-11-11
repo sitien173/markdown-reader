@@ -16,6 +16,9 @@ function loadLanguage(language: string): Promise<LangModule> {
       case 'json':
         loaded = import('shiki/langs/json.mjs');
         break;
+      case 'jsonc':
+        loaded = import('shiki/langs/jsonc.mjs');
+        break;
       case 'html':
         loaded = import('shiki/langs/html.mjs');
         break;
@@ -51,6 +54,7 @@ const supported = new Set<BundledLanguage>([
   'javascript',
   'typescript',
   'json',
+  'jsonc',
   'html',
   'css',
   'bash',

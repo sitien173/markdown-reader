@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import { createStore, type StoreApi, useStore } from 'zustand';
 import { type DocKind, docKindFromName } from '../lib/doc-kind';
+import type { JsonParseError } from '../lib/json-document';
 import type { Heading } from '../render/pipeline';
 import type { DirectorySource, TreeNode } from '../source/directory';
 import type { RecentItem } from './recent';
@@ -8,7 +9,11 @@ import { useSettingsStore } from './settings-store';
 
 export type Mode = 'read' | 'edit' | 'split';
 export type SidebarTab = 'contents' | 'files';
-export type Banner = { kind: 'error'; message: string } | { kind: 'externalChange' } | null;
+export type Banner =
+  | { kind: 'error'; message: string }
+  | { kind: 'jsonError'; message: string; line: number; column: number }
+  | { kind: 'externalChange' }
+  | null;
 
 export interface FileTreeState {
   rootUrl: string;
@@ -29,6 +34,7 @@ export interface ReaderState {
   sidebarTab: SidebarTab;
   focusMode: boolean;
   error: string;
+  parseError: JsonParseError | null;
   externalChange: boolean;
   conflict: boolean;
   dirty: boolean;
@@ -69,6 +75,7 @@ function initialState(): ReaderState {
     // Zen mode: the stored Appearance value is the start state. Leaving focus mode later changes this session only.
     focusMode: useSettingsStore.getState().settings.appearance.zen,
     error: '',
+    parseError: null,
     externalChange: false,
     conflict: false,
     dirty: false,
@@ -106,9 +113,10 @@ export function useReaderStore<T>(selector: (state: ReaderState) => T): T {
 }
 
 /** Every persistent condition, highest priority first. Conditions coexist, so dismissing the error leaves the external-change prompt. */
-export function selectBanners(state: Pick<ReaderState, 'error' | 'externalChange'>): NonNullable<Banner>[] {
+export function selectBanners(state: Pick<ReaderState, 'error' | 'externalChange' | 'parseError'>): NonNullable<Banner>[] {
   const banners: NonNullable<Banner>[] = [];
   if (state.error) banners.push({ kind: 'error', message: state.error });
+  if (state.parseError) banners.push({ kind: 'jsonError', ...state.parseError });
   if (state.externalChange) banners.push({ kind: 'externalChange' });
   return banners;
 }
