@@ -40,30 +40,38 @@ export type JsonViewOptions = {
 // jsonc-parser declares SyntaxKind as a const enum, which cannot be read through a dynamic import.
 const LINE_COMMENT = 12;
 const BLOCK_COMMENT = 13;
+const LINE_BREAK = 14;
 const TRIVIA = 15;
+const EOF = 17;
 const CLOSE_BRACE = 2;
 const CLOSE_BRACKET = 4;
 const COMMA = 5;
 
 type Jsonc = typeof import('jsonc-parser');
 
+const isComment = (kind: number): boolean => kind === LINE_COMMENT || kind === BLOCK_COMMENT;
+const isTrivia = (kind: number): boolean => isComment(kind) || kind === LINE_BREAK || kind === TRIVIA;
+
 function hasCommentTokens({ createScanner }: Jsonc, text: string): boolean {
   const scanner = createScanner(text, false);
-  for (let kind = scanner.scan(); kind !== 17; kind = scanner.scan()) if (kind === LINE_COMMENT || kind === BLOCK_COMMENT) return true;
+  for (let kind = scanner.scan(); kind !== EOF; kind = scanner.scan()) if (isComment(kind)) return true;
   return false;
 }
 
 function strip({ createScanner }: Jsonc, text: string): string {
   const scanner = createScanner(text, false);
   const tokens: { kind: number; start: number; end: number }[] = [];
-  for (let kind = scanner.scan(); kind !== 17; kind = scanner.scan())
+  for (let kind = scanner.scan(); kind !== EOF; kind = scanner.scan())
     tokens.push({ kind, start: scanner.getTokenOffset(), end: scanner.getPosition() });
   let out = '';
   tokens.forEach(({ kind, start, end }, i) => {
-    if (kind === LINE_COMMENT || kind === BLOCK_COMMENT) return;
+    if (isComment(kind)) return;
+    // Trivia directly before a comment sits on the comment's line, so it goes with the comment.
+    const following = tokens[i + 1];
+    if (kind === TRIVIA && following && isComment(following.kind)) return;
     if (kind === COMMA) {
-      let next = tokens[i + 1];
-      for (let j = i + 2; next && next.kind >= LINE_COMMENT && next.kind <= TRIVIA; j++) next = tokens[j];
+      let next = following;
+      for (let j = i + 2; next && isTrivia(next.kind); j++) next = tokens[j];
       if (next?.kind === CLOSE_BRACE || next?.kind === CLOSE_BRACKET) return;
     }
     out += text.slice(start, end);
@@ -95,18 +103,23 @@ function sortKeys({ parseTree }: Jsonc, text: string): string {
 function minify({ createScanner }: Jsonc, text: string): string {
   const scanner = createScanner(text, true);
   let out = '';
-  for (let kind = scanner.scan(); kind !== 17; kind = scanner.scan()) out += text.slice(scanner.getTokenOffset(), scanner.getPosition());
+  for (let kind = scanner.scan(); kind !== EOF; kind = scanner.scan()) out += text.slice(scanner.getTokenOffset(), scanner.getPosition());
   return out;
 }
 
-/** Builds one toolbar view of a JSON document. Number text, string escapes, and duplicate keys stay byte-exact. */
+/**
+ * Builds one toolbar view of a JSON document. Number text, string escapes, and duplicate keys stay byte-exact.
+ * Line endings are normalized to LF in every view.
+ * The source must already parse: `sortKeys` silently returns its input unchanged on a parse error.
+ * The `kind` parameter is reserved and currently unused.
+ */
 export async function transformJson(
   source: string,
   _kind: 'json' | 'jsonc',
   options: JsonViewOptions,
 ): Promise<{ text: string; hasComments: boolean }> {
   const jsonc = await import('jsonc-parser');
-  let text = source.replace(/^\uFEFF/, '');
+  let text = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   if (options.stripComments || options.sortKeys) text = strip(jsonc, text);
   // Sorting emits compact text, so the original layout falls back to beautify.
   if (options.sortKeys) text = sortKeys(jsonc, text);
@@ -133,10 +146,8 @@ export async function unescapeJson(source: string, kind: 'json' | 'jsonc'): Prom
   });
   if (errors.length || root?.type !== 'string') return null;
   const text = String(root.value);
-  try {
-    JSON.parse(text);
-    return { text, parses: true };
-  } catch {
-    return { text, parses: false };
-  }
+  // Same parser as the pipeline, so text that prepareJson accepts also counts as parsing.
+  const decodedErrors: import('jsonc-parser').ParseError[] = [];
+  const decoded = parseTree(text.replace(/^\uFEFF/, ''), decodedErrors, { disallowComments: true });
+  return { text, parses: !!decoded && decodedErrors.length === 0 };
 }

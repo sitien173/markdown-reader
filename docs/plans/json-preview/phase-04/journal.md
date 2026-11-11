@@ -57,3 +57,27 @@ TASK_COMPLETE
 - Phase implementation ref: refs/plans/json-preview/phase-04/impl
 - Plan commit ref: pending
 - State checkpoint: temporary commit
+
+### Review Fix Cycle 1 Response
+
+# EXTERNAL RESPONSE
+## META
+- Phase 4 / Started 2026-11-11 / Finished 2026-11-11 / Plan dir docs/plans/json-preview
+## SUMMARY
+Fixed all seven review findings in `src/lib/json-document.ts` and its tests; the NBSP and `\v` claim in finding 5 is wrong for `jsonc-parser` 3.3.1, so only the BOM mismatch was fixed.
+## FILES MODIFIED
+| Action | Path | Change |
+| --- | --- | --- |
+| Modify | src/lib/json-document.ts | LF normalization, strip drops trivia before comments, `parses` via `parseTree`, `EOF` and `LINE_BREAK` constants, explicit trivia kinds, doc comment |
+| Modify | tests/unit/json-document.test.ts | Order, exact sort fallback, strip, CRLF, BOM, and NBSP tests |
+| Modify | docs/plans/json-preview/phase-04/notes.md | `## Review fixes` block and deep-nesting note |
+| Modify | docs/plans/json-preview/phase-04/journal.md | This response |
+## NOTES
+- phase-04/notes.md  (## Review fixes)
+- Fresh checks: typecheck pass; lint exit 0 with 208 warnings, 3 infos; test 45 files, 608 passed
+## SPEC COMPLIANCE
+- Meets Spec? YES
+## CLARIFICATIONS NEEDED
+None
+## NEXT
+TASK_COMPLETE

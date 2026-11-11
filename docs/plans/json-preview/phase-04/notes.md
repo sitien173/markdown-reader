@@ -82,3 +82,27 @@
   - `pnpm lint` -> exit 0, 208 warnings, 3 infos (baseline)
   - `pnpm test` -> 45 files, 580 passed (baseline 562)
 - Root cause (bugfix only): none
+
+## Review fixes
+
+Review cycle 1, PASS_WITH_DEBT, seven findings. All edits are in `src/lib/json-document.ts` and `tests/unit/json-document.test.ts`. `prepareJson` and the 12 pre-existing tests are unchanged.
+
+1. Medium, pipeline order: added `runs layout before escape` (beautify plus escape equals `JSON.stringify` of the beautified text) and `runs layout after sort` (sortKeys plus beautify gives indented output). The existing order test is kept.
+2. Low, sort plus original: the test now asserts the exact output `'{\n  "a": 2,\n  "b": 1\n}'`, and `'{\n    "a": 2,\n    "b": 1\n}'` at indent 4.
+3. Low, line endings: `transformJson` normalizes `\r\n?` to `\n` after the BOM strip, so every view outputs LF. `eol: '\n'` stays and is a no-op for text with a line break. New test covers CRLF and lone CR across original, beautify, minify, sort, and sort plus beautify.
+4. Low, strip: a `Trivia` token directly before a removed comment is dropped. `'{\n  /* block */ "a": 1, // line\n'` now strips to `'{\n "a": 1,\n'`. Test asserts the exact output.
+5. Low, `parses`: `unescapeJson` now strips the BOM and uses `parseTree` with `disallowComments: true`, requiring a root and no errors. A BOM test is added.
+   - Deviation from the finding: `jsonc-parser` 3.3.1 does not treat NBSP, `\v`, or `\f` as whitespace. Its `isWhiteSpace` accepts only space and tab, and `parseTree` reports `InvalidSymbol` for them. `JSON.parse` and the pipeline therefore already agreed on those characters. Only the BOM mismatch was real. The NBSP test asserts `parses: false` and that `prepareJson` also reports an error.
+6. Info, constants: added `EOF = 17` and `LINE_BREAK = 14`. The three bare `17` literals are replaced. The trivia range check is replaced by explicit `isComment` and `isTrivia` helpers listing the kinds. Lookahead behavior is unchanged because the range already included `LINE_BREAK`.
+7. Info, docs: the `transformJson` doc comment now states that LF is enforced, that the source must already parse, that `sortKeys` silently returns its input unchanged on a parse error, and that `kind` is reserved and unused.
+
+### Record only: deep nesting
+Very deep nesting raises `RangeError` from both `prepareJson` and `transformJson`, because `jsonc-parser` and the rebuild recursion both recurse. This predates Phase 4. No code change. Phase 5 must catch a rejected promise from either function and show the parse-error banner.
+
+### Test evidence
+- RED against the previous source: 3 failed (strip trivia, CRLF, BOM), 33 passed. The order, sort-original, and NBSP tests pin existing behavior and pass on both versions.
+- GREEN: `pnpm vitest run tests/unit/json-document.test.ts` -> 36 passed.
+- Final checks, run one at a time from the repository root:
+  - `pnpm typecheck` -> pass
+  - `pnpm lint` -> exit 0, 208 warnings, 3 infos
+  - `pnpm test` -> 45 files, 608 passed (previously 602)

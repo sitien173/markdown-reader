@@ -146,8 +146,16 @@ describe('transformJson strip and sort', () => {
     const result = await transformJson(source, 'jsonc', view({ sortKeys: true, stripComments: false, layout: 'minify' }));
     expect(result).toEqual({ text: '{"a":2,"b":1}', hasComments: false });
     const original = await transformJson(source, 'jsonc', view({ sortKeys: true }));
-    expect(original.text).not.toMatch(/\/\/|\/\*/);
-    expect(original.hasComments).toBe(false);
+    expect(original).toEqual({ text: '{\n  "a": 2,\n  "b": 1\n}', hasComments: false });
+    expect(await transformJson(source, 'jsonc', view({ sortKeys: true, indent: 4 }))).toEqual({
+      text: '{\n    "a": 2,\n    "b": 1\n}',
+      hasComments: false,
+    });
+  });
+  it('strip drops the trivia before a removed comment', async () => {
+    const source = '{\n  /* block */ "a": 1, // line\n';
+    const result = await transformJson(source, 'jsonc', view({ stripComments: true }));
+    expect(result).toEqual({ text: '{\n "a": 1,\n', hasComments: false });
   });
   it('keeps number text, escapes, and duplicate keys byte-exact through sort and strip', async () => {
     const source = '{"z":12345678901234567890,"e":1.0e+2,"n":-0,"s":"\\u00e9é","a":1,"a":2}';
@@ -170,6 +178,29 @@ describe('transformJson escape and unescapeJson', () => {
     const { text } = await transformJson(source, 'jsonc', view({ sortKeys: true, layout: 'minify', escape: true }));
     expect(text).toBe(JSON.stringify('{"a":12345678901234567890,"b":1}'));
   });
+  it('runs layout before escape, so beautify newlines are escaped', async () => {
+    const { text } = await transformJson('{"a":1}', 'json', view({ layout: 'beautify', escape: true }));
+    expect(text).toBe(JSON.stringify('{\n  "a": 1\n}'));
+    expect(text).toContain('\\n');
+  });
+  it('runs layout after sort, so sorted output is indented', async () => {
+    const { text } = await transformJson('{"b":1,"a":2}', 'json', view({ sortKeys: true, layout: 'beautify' }));
+    expect(text).toBe('{\n  "a": 2,\n  "b": 1\n}');
+  });
+  it('normalizes CRLF and CR to LF in every view', async () => {
+    const source = '{\r\n  "b": 1,\r\n  "a": 2\r\n}';
+    for (const opts of [
+      {},
+      { layout: 'beautify' },
+      { layout: 'minify' },
+      { sortKeys: true },
+      { sortKeys: true, layout: 'beautify' },
+    ] as const) {
+      expect((await transformJson(source, 'json', view(opts))).text).not.toContain('\r');
+    }
+    expect((await transformJson(source, 'json', view({ layout: 'beautify' }))).text).toBe('{\n  "b": 1,\n  "a": 2\n}');
+    expect((await transformJson('{\r"a":1}', 'json', view({ layout: 'beautify' }))).text).toBe('{\n  "a": 1\n}');
+  });
   it('round trips escape then unescape byte-exact', async () => {
     const source = '{"n":1.0e+2,"z":-0,"s":"\\u00e9é","a":1,"a":2}';
     const escaped = await transformJson(source, 'json', view({ escape: true }));
@@ -187,6 +218,15 @@ describe('transformJson escape and unescapeJson', () => {
     expect(await unescapeJson('"not json"', 'json')).toEqual({ text: 'not json', parses: false });
     expect(await unescapeJson('"{\\"a\\":1,}"', 'json')).toEqual({ text: '{"a":1,}', parses: false });
     expect(await unescapeJson('"[1,2]"', 'json')).toEqual({ text: '[1,2]', parses: true });
+  });
+  it('strips a BOM before deciding whether the decoded text parses', async () => {
+    expect(await unescapeJson('"\\ufeff[1]"', 'json')).toEqual({ text: '\uFEFF[1]', parses: true });
+    expect(await unescapeJson('""', 'json')).toEqual({ text: '', parses: false });
+  });
+  it('agrees with prepareJson on non-breaking space, which the jsonc-parser scanner rejects', async () => {
+    const decoded = '[1,\u00A02]';
+    expect(await unescapeJson('"[1,\\u00a02]"', 'json')).toEqual({ text: decoded, parses: false });
+    expect((await prepareJson(decoded, 'json')).error).not.toBeNull();
   });
   it('allows comments around a string root for jsonc only', async () => {
     expect(await unescapeJson('/* c */ "x"', 'jsonc')).toEqual({ text: 'x', parses: false });
