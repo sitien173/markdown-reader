@@ -2,7 +2,7 @@
 
 **Design:** [DESIGN.md](DESIGN.md)
 **Context key:** `json-preview`
-**Base:** `refs/plans/json-preview/base` (`bebf24f`)
+**Base:** `refs/plans/json-preview/base` (`c9c2800`)
 **Commit:** `feat(reader): preview .json and .jsonc documents with view tools`
 
 ## Outcome & Scope
@@ -18,7 +18,7 @@ Preserved invariants:
 
 Out of scope: JSON code blocks in Markdown, tree view, editing JSON or writing to the source file, JSON5, NDJSON, `.jsonl`, Content-Type or content sniffing for extensionless URLs, a Firefox workaround, command-palette entries or shortcuts for JSON tools, remembered toolbar state, Web Worker transforms, unescaping bare escaped text.
 
-Execution precondition: met. `docs/plans/file-url-folder-tree` is `DONE` at `bebf24f`; the plan `base` was moved there and every baseline command and named symbol was re-checked on 2026-11-10.
+Execution precondition: met. `docs/plans/file-url-folder-tree` is `DONE` at `bebf24f`; the plan `base` was moved there and every baseline command and named symbol was re-checked on 2026-11-10. Re-anchored 2026-11-11: `docs/plans/open-source-release` landed 17 further commits on `main`, so the plan `base` moved to `c9c2800` and execution runs on branch `feat/json-preview`.
 
 Secret handling: no phase reads `.env` or credential files.
 
@@ -26,12 +26,12 @@ Run verification commands one at a time, never concurrently. If `pnpm test:e2e` 
 
 ## Baseline Evidence
 
-Recorded at `bebf24f`, run one at a time.
+Re-recorded at `c9c2800` on 2026-11-11, run one at a time. The earlier `bebf24f` figures are superseded.
 
 - `pnpm typecheck`: pass.
-- `pnpm lint`: pass, 0 errors, 207 warnings, 3 infos.
-- `pnpm test`: pass, 42 files, 541 tests.
-- `pnpm test:e2e`: pass, 189 tests, 6.1m.
+- `pnpm lint`: pass, 0 errors, 208 warnings, 3 infos.
+- `pnpm test`: pass, 44 files, 543 tests.
+- `pnpm test:e2e`: not re-run at `c9c2800`; recorded at `bebf24f` as pass, 189 tests, 6.1m. Phase 3 re-establishes it.
 
 ### Phase 1: JSON document core, setting, and detection
 
