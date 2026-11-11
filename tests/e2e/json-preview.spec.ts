@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -73,6 +74,11 @@ test.beforeAll(async () => {
     if (req.url === '/simple.json') {
       res.setHeader('content-type', 'application/json');
       res.end('{\n  "title": "preview"\n}');
+      return;
+    }
+    if (req.url === '/escaped.json') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(JSON.stringify({ unescaped: true, count: 42 })));
       return;
     }
     res.writeHead(404);
@@ -221,4 +227,190 @@ test('auto-refresh re-renders after the fixture changes on disk', async ({ userD
     await context.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('toolbar layout and indent change the view', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/sample.json`)}`);
+  await expect(page.locator('.md-content')).toBeVisible({ timeout: 20000 });
+  const toolbar = page.locator('[data-slot="json-toolbar"]');
+  await expect(toolbar).toBeVisible();
+
+  // Initial: Beautify with 2 spaces (open rule for single-line)
+  await expect(toolbar.getByRole('button', { name: 'Beautify' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.md-content pre code')).toHaveText('{\n  "hello": "world"\n}');
+
+  // Change indent to 4 spaces
+  await toolbar.locator('[data-slot="select-trigger"]').click();
+  await page.getByRole('option', { name: '4 spaces' }).click();
+  await expect(page.locator('.md-content pre code')).toHaveText('{\n    "hello": "world"\n}');
+
+  // Change indent to tab
+  await toolbar.locator('[data-slot="select-trigger"]').click();
+  await page.getByRole('option', { name: 'Tab' }).click();
+  await expect(page.locator('.md-content pre code')).toHaveText('{\n\t"hello": "world"\n}');
+
+  // Minify
+  await toolbar.getByRole('button', { name: 'Minify' }).click();
+  await expect(page.locator('.md-content pre code')).toHaveText('{"hello":"world"}');
+
+  // Original
+  await toolbar.getByRole('button', { name: 'Original' }).click();
+  await expect(page.locator('.md-content pre code')).toHaveText('{"hello":"world"}');
+});
+
+test('Sort keys locks and checks Strip comments on JSONC', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/comments.jsonc`)}`);
+  await expect(page.locator('.md-content')).toBeVisible({ timeout: 20000 });
+  const toolbar = page.locator('[data-slot="json-toolbar"]');
+
+  const stripToggle = toolbar.getByRole('button', { name: 'Strip comments' });
+  const sortToggle = toolbar.getByRole('button', { name: 'Sort keys' });
+
+  await expect(stripToggle).toBeVisible();
+  await expect(stripToggle).toBeEnabled();
+  await expect(stripToggle).toHaveAttribute('aria-pressed', 'false');
+
+  await sortToggle.click();
+  await expect(sortToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(stripToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(stripToggle).toBeDisabled();
+
+  // Content has sorted keys and comments removed
+  const text = (await page.locator('.md-content pre code').textContent()) ?? '';
+  expect(text).not.toContain('// leading comment');
+  expect(text).not.toContain('/* inline */');
+});
+
+test('Escape and Unescape round trip', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/escaped.json`)}`);
+  await expect(page.locator('.md-content')).toBeVisible({ timeout: 20000 });
+  const toolbar = page.locator('[data-slot="json-toolbar"]');
+
+  const unescapeBtn = toolbar.getByRole('button', { name: 'Unescape' });
+  await expect(unescapeBtn).toBeVisible();
+
+  // Unescape
+  await unescapeBtn.click();
+  const revertBtn = toolbar.getByRole('button', { name: 'Revert' });
+  await expect(revertBtn).toBeVisible();
+  await expect(page.locator('.md-content pre code')).toContainText('"unescaped": true');
+
+  // Escape toggle
+  const escapeToggle = toolbar.getByRole('button', { name: 'Escape' });
+  await escapeToggle.click();
+  await expect(escapeToggle).toHaveAttribute('aria-pressed', 'true');
+  // The view repaints through transformJson and enhance, so wait on the text rather than reading it once
+  await expect(page.locator('.md-content pre code')).toHaveText(/^\s*"/);
+
+  // Toggle Escape off
+  await escapeToggle.click();
+  await expect(escapeToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.md-content pre code')).toContainText('"unescaped": true');
+
+  // Revert back to original escaped string literal
+  await revertBtn.click();
+  await expect(toolbar.getByRole('button', { name: 'Unescape' })).toBeVisible();
+});
+
+test('code-bar Copy copies the current view', async ({ context, page, extensionId }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/simple.json`)}`);
+  await expect(page.locator('.md-content')).toBeVisible({ timeout: 20000 });
+
+  const toolbar = page.locator('[data-slot="json-toolbar"]');
+  await toolbar.getByRole('button', { name: 'Minify' }).click();
+  await expect(page.locator('.md-content pre code')).toHaveText('{"title":"preview"}');
+
+  const copyBtn = page.locator('.md-code-copy');
+  await copyBtn.click();
+  await expect(copyBtn).toHaveText('Copied');
+
+  const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboardText).toBe('{"title":"preview"}');
+});
+
+test('Download saves view with correct name and content', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/comments.jsonc`)}`);
+  await expect(page.locator('.md-content')).toBeVisible({ timeout: 20000 });
+  const toolbar = page.locator('[data-slot="json-toolbar"]');
+
+  // While comments remain: filename is .jsonc
+  const downloadPromise = page.waitForEvent('download');
+  await toolbar.getByRole('button', { name: 'Download' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('comments.jsonc');
+
+  // Minify removes comments: filename becomes .json
+  await toolbar.getByRole('button', { name: 'Minify' }).click();
+  const downloadPromise2 = page.waitForEvent('download');
+  await toolbar.getByRole('button', { name: 'Download' }).click();
+  const download2 = await downloadPromise2;
+  expect(download2.suggestedFilename()).toBe('comments.json');
+
+  const stream = await download2.createReadStream();
+  const chunks: Buffer[] = [];
+  if (stream) {
+    for await (const chunk of stream) {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+  }
+  const downloadedContent = Buffer.concat(chunks).toString('utf8');
+  expect(downloadedContent).toBe('{"key":"value"}');
+});
+
+test('auto-refresh keeps toolbar state', async ({ userDataDir }) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'markdown-reader-json-toolbar-state-'));
+  const file = path.join(dir, 'live-state.json');
+  await writeFile(file, '{\n  "count": 1\n}\n');
+  const { context, extensionId } = await contextWithFileAccess(userDataDir);
+  try {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(pathToFileURL(file).href)}&mode=read`);
+    await expect(page.locator('.md-content')).toBeVisible({ timeout: 20000 });
+
+    const toolbar = page.locator('[data-slot="json-toolbar"]');
+    const minifyBtn = toolbar.getByRole('button', { name: 'Minify' });
+    await minifyBtn.click();
+    await expect(page.locator('.md-content pre code')).toHaveText('{"count":1}');
+
+    // Change file content on disk
+    await writeFile(file, '{\n  "count": 2\n}\n');
+    await expect(page.locator('.md-content pre code')).toHaveText('{"count":2}', { timeout: 20000 });
+
+    // Toolbar Minify state remains active
+    await expect(minifyBtn).toHaveAttribute('aria-pressed', 'true');
+  } finally {
+    await context.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a parse error disables the tools and Download uses original text', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/reader.html?src=${encodeURIComponent(`${origin}/invalid.json`)}`);
+  await expect(page.locator('[data-slot="status-banner"]')).toBeVisible({ timeout: 20000 });
+  const toolbar = page.locator('[data-slot="json-toolbar"]');
+
+  await expect(toolbar.getByRole('button', { name: 'Original' })).toBeDisabled();
+  await expect(toolbar.getByRole('button', { name: 'Beautify' })).toBeDisabled();
+  await expect(toolbar.getByRole('button', { name: 'Minify' })).toBeDisabled();
+  await expect(toolbar.getByRole('button', { name: 'Sort keys' })).toBeDisabled();
+  await expect(toolbar.getByRole('button', { name: 'Escape' })).toBeDisabled();
+
+  const downloadBtn = toolbar.getByRole('button', { name: 'Download' });
+  await expect(downloadBtn).toBeEnabled();
+
+  const downloadPromise = page.waitForEvent('download');
+  await downloadBtn.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('invalid.json');
+
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  if (stream) {
+    for await (const chunk of stream) {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+  }
+  const downloadedContent = Buffer.concat(chunks).toString('utf8');
+  expect(downloadedContent).toBe('{\n  "name": \n}');
 });

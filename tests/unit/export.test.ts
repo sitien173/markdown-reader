@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { buildStandaloneHtml, downloadHtml, printDocument, prepareExportContent, themeExportDiagrams } from '../../src/export/export';
+import {
+  buildStandaloneHtml,
+  downloadHtml,
+  downloadText,
+  printDocument,
+  prepareExportContent,
+  themeExportDiagrams,
+} from '../../src/export/export';
 import { EXPORT_CSS, EXPORT_TOKENS } from '../../src/export/export-styles';
 import { readFileSync } from 'node:fs';
 import type { Appearance } from '../../src/lib/appearance';
@@ -148,6 +155,53 @@ describe('export module', () => {
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:test-url');
     } finally {
       vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('triggers downloadText with filename, text, MIME type, and revokes URL after timeout', () => {
+    vi.useFakeTimers();
+    try {
+      let createdBlob: Blob | null = null;
+      const createObjectURL = vi.fn().mockImplementation((blob: Blob) => {
+        createdBlob = blob;
+        return 'blob:text-download';
+      });
+      const revokeObjectURL = vi.fn();
+      globalThis.URL.createObjectURL = createObjectURL;
+      globalThis.URL.revokeObjectURL = revokeObjectURL;
+
+      let downloadName = '';
+      let clickedHref = '';
+      const clickSpy = vi.fn();
+      const createElementOrig = document.createElement.bind(document);
+      vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+        const el = createElementOrig(tagName);
+        if (tagName === 'a') {
+          el.click = () => {
+            downloadName = (el as HTMLAnchorElement).download;
+            clickedHref = (el as HTMLAnchorElement).href;
+            clickSpy();
+          };
+        }
+        return el;
+      });
+
+      downloadText('test.json', '{"a":1}', 'application/json;charset=utf-8');
+
+      expect(createObjectURL).toHaveBeenCalled();
+      expect(clickSpy).toHaveBeenCalled();
+      expect(downloadName).toBe('test.json');
+      expect(clickedHref).toBe('blob:text-download');
+      expect(createdBlob).not.toBeNull();
+      expect((createdBlob as unknown as Blob)?.type).toBe('application/json;charset=utf-8');
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1000);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:text-download');
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
     }
   });
 

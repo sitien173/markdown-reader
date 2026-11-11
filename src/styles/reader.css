@@ -354,6 +354,17 @@ nav > .nav-list {
   min-width: 0;
 }
 
+.json-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  user-select: none;
+}
+
 @media print {
   body {
     background: #ffffff !important;
@@ -366,6 +377,7 @@ nav > .nav-list {
   }
   .reader-bar,
   .reader-float,
+  .json-toolbar,
   .md-code-bar,
   .md-permalink,
   .reader-banners,

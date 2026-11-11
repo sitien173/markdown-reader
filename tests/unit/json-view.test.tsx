@@ -238,4 +238,197 @@ describe('JsonView component', () => {
     expect(container.textContent).toContain('"second": 2');
     expect(container.textContent).not.toContain('"first": 1');
   });
+
+  it('proves the open rule sets Beautify 2 spaces for single-line and Original for multiline', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    // Single line
+    await act(async () => {
+      root.render(<JsonView ref={ref} text='{"single": 1}' kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+    const beautifyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Beautify');
+    expect(beautifyBtn?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('code')?.textContent).toBe('{\n  "single": 1\n}');
+
+    // Multiline
+    await act(async () => {
+      root.render(<JsonView ref={ref} text={'{\n    "multi": 2\n}'} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+    const originalBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Original');
+    expect(originalBtn?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('code')?.textContent).toBe('{\n    "multi": 2\n}');
+  });
+
+  it('proves opening a different document resets the toolbar to the open rule', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="docA.json" text={'{\n  "a": 1\n}'} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const minifyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Minify');
+    expect(minifyBtn).toBeDefined();
+    await act(async () => {
+      minifyBtn?.click();
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+    expect(minifyBtn?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('code')?.textContent).toBe('{"a":1}');
+
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="docB.json" text={'{\n  "b": 2\n}'} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const originalBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Original');
+    expect(originalBtn?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('code')?.textContent).toBe('{\n  "b": 2\n}');
+  });
+
+  it('proves auto-refresh with the same source keeps toolbar state', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="live.json" text={'{\n  "a": 1\n}'} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const minifyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Minify');
+    expect(minifyBtn).toBeDefined();
+    await act(async () => {
+      minifyBtn?.click();
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+    expect(container.querySelector('code')?.textContent).toBe('{"a":1}');
+
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="live.json" text={'{\n  "a": 2\n}'} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const newMinifyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Minify');
+    expect(newMinifyBtn?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('code')?.textContent).toBe('{"a":2}');
+  });
+
+  it('proves unescape is reverted on refresh when the root is no longer a string', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    const stringSource = '"{\\"hello\\":\\"world\\"}"';
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="unescape.json" text={stringSource} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const unescapeBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Unescape'));
+    expect(unescapeBtn).toBeDefined();
+    await act(async () => {
+      unescapeBtn?.click();
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    expect(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Revert'))).toBeDefined();
+    expect(container.querySelector('code')?.textContent).toContain('"hello": "world"');
+
+    await act(async () => {
+      root.render(
+        <JsonView ref={ref} source="unescape.json" text={'{\n  "notAString": true\n}'} kind="json" onParseError={onParseError} />,
+      );
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    expect(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Revert'))).toBeUndefined();
+    expect(container.querySelector('code')?.textContent).toContain('"notAString": true');
+  });
+
+  it('proves abort of a stale transformJson', async () => {
+    let resolveFirst: (v: { text: string; hasComments: boolean }) => void = () => {};
+    let resolveSecond: (v: { text: string; hasComments: boolean }) => void = () => {};
+    const firstPromise = new Promise<{ text: string; hasComments: boolean }>((res) => {
+      resolveFirst = res;
+    });
+    const secondPromise = new Promise<{ text: string; hasComments: boolean }>((res) => {
+      resolveSecond = res;
+    });
+
+    vi.spyOn(jsonDocument, 'transformJson')
+      .mockImplementationOnce(() => firstPromise)
+      .mockImplementationOnce(() => secondPromise);
+
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+
+    await act(async () => {
+      root.render(<JsonView ref={ref} text='{"first": 1}' kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      root.render(<JsonView ref={ref} text='{"second": 2}' kind="json" onParseError={onParseError} />);
+    });
+
+    let readyResolved = false;
+    const readyPromise = ref.current?.ready().then(() => {
+      readyResolved = true;
+    });
+
+    // Resolve first (stale)
+    resolveFirst({ text: '{"first": 1}', hasComments: false });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(readyResolved).toBe(false);
+
+    // Resolve second (latest)
+    resolveSecond({ text: '{"second": 2}', hasComments: false });
+    await act(async () => {
+      await readyPromise;
+    });
+
+    expect(readyResolved).toBe(true);
+    expect(container.querySelector('code')?.textContent).toBe('{"second": 2}');
+  });
+
+  it('proves a rejected transformJson is reported rather than thrown', async () => {
+    vi.spyOn(jsonDocument, 'transformJson').mockRejectedValueOnce(new RangeError('Maximum call stack size exceeded'));
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    const deep = '{"nested": 1}';
+    await act(async () => {
+      root.render(<JsonView ref={ref} text={deep} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+    expect(onParseError).toHaveBeenCalledWith({
+      message: 'Maximum call stack size exceeded',
+      line: 1,
+      column: 1,
+    });
+    expect(container.textContent).toContain(deep);
+  });
 });

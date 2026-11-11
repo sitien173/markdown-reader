@@ -248,23 +248,27 @@ export async function themeExportDiagrams(contentHtml: string): Promise<string> 
   return container.innerHTML;
 }
 
+export function downloadText(filename: string, text: string, mime: string): void {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function downloadHtml(title: string, contentHtml: string, appearance?: Appearance): Promise<void> | void {
   const triggerDownload = (finalContent: string) => {
     const html = buildStandaloneHtml({ title, contentHtml: finalContent, appearance });
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
     const slug =
       (title || 'document')
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '') || 'document';
-    a.download = `${slug}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadText(`${slug}.html`, html, 'text/html;charset=utf-8');
   };
 
   if (contentHtml.includes('data-md-diagram')) {

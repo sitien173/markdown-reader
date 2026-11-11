@@ -162,6 +162,24 @@ export const enUS = {
       copyright: '© 2026 Markdown Reader',
     },
   },
+  json: {
+    toolbar: 'JSON view toolbar',
+    layout: 'Layout',
+    original: 'Original',
+    beautify: 'Beautify',
+    minify: 'Minify',
+    indent: 'Indentation',
+    indent2: '2 spaces',
+    indent4: '4 spaces',
+    indentTab: 'Tab',
+    sortKeys: 'Sort keys',
+    sortKeysDescription: 'Sort keys (formats as beautified)',
+    stripComments: 'Strip comments',
+    escape: 'Escape',
+    unescape: 'Unescape',
+    revert: 'Revert',
+    download: 'Download',
+  },
 } as const;
 
 export type TranslationDictionary = typeof enUS;

@@ -536,7 +536,7 @@ function Content({
           {mode !== 'read' && <EditorPane key={loadId} initialText={controller.getDraft()} onChange={onEdit} />}
           {mode !== 'edit' &&
             (isJson ? (
-              <JsonView ref={viewRef} text={mountText} kind={docKind} onParseError={onParseError} />
+              <JsonView ref={viewRef} text={mountText} kind={docKind} source={source} onParseError={onParseError} />
             ) : (
               <MarkdownView
                 ref={viewRef}
