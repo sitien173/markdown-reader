@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import { createStore, type StoreApi, useStore } from 'zustand';
+import { type DocKind, docKindFromName } from '../lib/doc-kind';
 import type { Heading } from '../render/pipeline';
 import type { DirectorySource, TreeNode } from '../source/directory';
 import type { RecentItem } from './recent';
@@ -17,6 +18,7 @@ export interface FileTreeState {
 }
 
 export interface ReaderState {
+  docKind: DocKind;
   mode: Mode;
   source: string;
   docPath: string | null;
@@ -50,9 +52,14 @@ export function parseMode(raw: string | null): Mode {
 
 function initialState(): ReaderState {
   const params = new URLSearchParams(window.location.search);
+  const src = params.get('src') ?? '';
+  const docKind = docKindFromName(src);
+  const parsedMode = parseMode(params.get('mode'));
+  const mode = docKind === 'markdown' ? parsedMode : 'read';
   return {
-    mode: parseMode(params.get('mode')),
-    source: params.get('src') ?? '',
+    docKind,
+    mode,
+    source: src,
     docPath: null,
     loading: false,
     headings: [],

@@ -29,6 +29,17 @@ describe('link rewriting', () => {
     expect(doc.querySelector('a[href="https://example.test/"]')?.getAttribute('target')).toBe('_blank');
   });
 
+  it('marks .json and .jsonc links with data-md-link attribute', () => {
+    const html = render(
+      '[config](config.json) [schema](https://example.test/schema.jsonc) [text](notes.txt)',
+      'https://example.test/docs/readme.md',
+    ).html;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    expect(doc.querySelector('a[href$="config.json"]')?.hasAttribute('data-md-link')).toBe(true);
+    expect(doc.querySelector('a[href$="schema.jsonc"]')?.hasAttribute('data-md-link')).toBe(true);
+    expect(doc.querySelector('a[href$="notes.txt"]')?.hasAttribute('data-md-link')).toBe(false);
+  });
+
   it('resolves folder-relative links and renders unresolvable outside links as disabled', async () => {
     const doc = new DOMParser().parseFromString(
       '<a href="sub/target.md">inner</a><a href="../outside.md">outside</a><a href="https://example.com/ext.md">external</a>',

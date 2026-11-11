@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchGitignore, findRepoRoot, getParentUrl, getRelPath, listDirectory } from '../../src/source/file-url-tree';
+import {
+  buildFileTreeLevel,
+  fetchGitignore,
+  findRepoRoot,
+  getParentUrl,
+  getRelPath,
+  GitignoreCache,
+  listDirectory,
+} from '../../src/source/file-url-tree';
 
 describe('file-url-tree', () => {
   const originalFetch = globalThis.fetch;
@@ -284,6 +292,29 @@ describe('file-url-tree', () => {
     it('throws when target is outside base and never returns a URL', () => {
       expect(() => getRelPath('file:///home/u/other/', 'file:///home/u/repo/')).toThrow();
       expect(() => getRelPath('file:///home/u/other.md', 'file:///home/u/repo/')).toThrow();
+    });
+  });
+
+  describe('buildFileTreeLevel', () => {
+    it('includes .json and .jsonc files alongside markdown files', async () => {
+      const html = `
+        <script>addRow("..","..",1,0,"0 B",0,"");</script>
+        <script>addRow("data.json","data.json",0,100,"100 B",0,"");</script>
+        <script>addRow("config.jsonc","config.jsonc",0,200,"200 B",0,"");</script>
+        <script>addRow("readme.md","readme.md",0,300,"300 B",0,"");</script>
+        <script>addRow("image.png","image.png",0,400,"400 B",0,"");</script>
+      `;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => html,
+      } as Response);
+
+      const cache = new GitignoreCache();
+      const nodes = await buildFileTreeLevel('file:///project/', 'file:///project/', 'file:///project/', cache, {
+        showHiddenItems: true,
+        ignorePatterns: '',
+      });
+      expect(nodes.map((n) => n.name)).toEqual(['config.jsonc', 'data.json', 'readme.md']);
     });
   });
 });

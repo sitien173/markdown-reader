@@ -274,6 +274,9 @@ function Sidebar({ controller }: { controller: ReaderController }) {
   const t = useT();
   const sidebarOpen = useReaderStore((s) => s.sidebarOpen);
   const sidebarTab = useReaderStore((s) => s.sidebarTab);
+  const docKind = useReaderStore((s) => s.docKind);
+  const isMarkdown = docKind === 'markdown';
+  const activeTab: SidebarTab = isMarkdown ? sidebarTab : 'files';
   const [searching, setSearching] = useState(false);
   const [filter, setFilter] = useState('');
   const filterRef = useRef<HTMLInputElement>(null);
@@ -291,15 +294,17 @@ function Sidebar({ controller }: { controller: ReaderController }) {
           aria-label={t('reader.sidebarView')}
           variant="outline"
           spacing={0}
-          value={[sidebarTab]}
+          value={[activeTab]}
           onValueChange={(next) => next[0] && selectTab(next[0] as SidebarTab)}
         >
           <ToggleGroupItem value="files" aria-label={t('reader.files')}>
             <FolderIcon aria-hidden="true" />
           </ToggleGroupItem>
-          <ToggleGroupItem value="contents" aria-label={t('reader.outline')}>
-            <ListIcon aria-hidden="true" />
-          </ToggleGroupItem>
+          {isMarkdown && (
+            <ToggleGroupItem value="contents" aria-label={t('reader.outline')}>
+              <ListIcon aria-hidden="true" />
+            </ToggleGroupItem>
+          )}
         </ToggleGroup>
         <Button
           variant="ghost"
@@ -323,7 +328,7 @@ function Sidebar({ controller }: { controller: ReaderController }) {
           onChange={(e) => setFilter(e.target.value)}
         />
       )}
-      {sidebarTab === 'files' ? <FilesPanel controller={controller} filter={filter} /> : <ContentsPanel filter={filter} />}
+      {activeTab === 'files' ? <FilesPanel controller={controller} filter={filter} /> : <ContentsPanel filter={filter} />}
     </aside>
   );
 }

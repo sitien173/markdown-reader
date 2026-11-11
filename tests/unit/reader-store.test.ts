@@ -12,6 +12,7 @@ beforeEach(() => {
 describe('reader store', () => {
   it('starts with documented defaults', () => {
     expect(get()).toMatchObject({
+      docKind: 'markdown',
       mode: 'read',
       source: '',
       docPath: null,
@@ -50,6 +51,20 @@ describe('reader store', () => {
     expect(parseMode('bogus')).toBe('read');
     expect(parseMode(null)).toBe('read');
     expect(parseMode('edit')).toBe('edit');
+  });
+
+  it('derives docKind from src and clamps mode to read for JSON files', () => {
+    window.history.replaceState(null, '', '/?src=a.json&mode=edit');
+    store = createReaderStore();
+    expect(get()).toMatchObject({ docKind: 'json', mode: 'read', source: 'a.json' });
+
+    window.history.replaceState(null, '', '/?src=config.jsonc&mode=split');
+    store = createReaderStore();
+    expect(get()).toMatchObject({ docKind: 'jsonc', mode: 'read', source: 'config.jsonc' });
+
+    window.history.replaceState(null, '', '/?src=doc.md&mode=edit');
+    store = createReaderStore();
+    expect(get()).toMatchObject({ docKind: 'markdown', mode: 'edit', source: 'doc.md' });
   });
 });
 

@@ -1,4 +1,5 @@
 import { resolveRelativePath, type DirectorySource } from '../source/directory';
+import { isJsonName } from '../lib/doc-kind';
 
 export function resolveLink(element: Element, baseUrl: string): void {
   const base = (() => {
@@ -18,7 +19,9 @@ export function resolveLink(element: Element, baseUrl: string): void {
       continue;
     }
     element.setAttribute(attribute, resolved.href);
-    if (attribute === 'href' && /\.(?:md|markdown)$/i.test(resolved.pathname)) element.setAttribute('data-md-link', '');
+    if (attribute === 'href' && (/\.(?:md|markdown)$/i.test(resolved.pathname) || isJsonName(resolved.pathname))) {
+      element.setAttribute('data-md-link', '');
+    }
     if (
       attribute === 'href' &&
       /^https?:$/.test(resolved.protocol) &&
@@ -43,7 +46,7 @@ export function resolveFolderLinks(element: Element, currentDocPath: string, fal
         element.setAttribute('target', '_blank');
         element.setAttribute('rel', 'noopener noreferrer');
       }
-      if (/\.(?:md|markdown)$/i.test(parsed.pathname)) {
+      if (/\.(?:md|markdown)$/i.test(parsed.pathname) || isJsonName(parsed.pathname)) {
         element.setAttribute('data-md-link', '');
       }
     } catch {
@@ -58,7 +61,7 @@ export function resolveFolderLinks(element: Element, currentDocPath: string, fal
       try {
         const resolved = new URL(href, fallbackBaseUrl);
         element.setAttribute('href', resolved.href);
-        if (/\.(?:md|markdown)$/i.test(resolved.pathname)) element.setAttribute('data-md-link', '');
+        if (/\.(?:md|markdown)$/i.test(resolved.pathname) || isJsonName(resolved.pathname)) element.setAttribute('data-md-link', '');
         if (/^https?:$/i.test(resolved.protocol)) {
           element.setAttribute('target', '_blank');
           element.setAttribute('rel', 'noopener noreferrer');
@@ -74,7 +77,7 @@ export function resolveFolderLinks(element: Element, currentDocPath: string, fal
   }
 
   element.setAttribute('href', path);
-  if (/\.(?:md|markdown)$/i.test(path)) {
+  if (/\.(?:md|markdown)$/i.test(path) || isJsonName(path)) {
     element.setAttribute('data-md-link', '');
     element.setAttribute('data-folder-path', path);
   }

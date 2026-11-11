@@ -87,6 +87,7 @@ function PaletteBody({
       text: s.text,
       writable: s.writable,
       mode: s.mode,
+      docKind: s.docKind,
     })),
   );
   const groups = useMemo<EntryGroup[]>(() => {
