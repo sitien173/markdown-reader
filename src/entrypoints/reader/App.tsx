@@ -473,7 +473,7 @@ function Content({
   viewRef: React.RefObject<MarkdownViewHandle | null>;
   run: RunCommand;
 }) {
-  const { docKind, mode, mountText, loadId, source, sourceId, loading, directorySource, docPath } = useReaderStore(
+  const { docKind, mode, mountText, loadId, source, sourceId, loading, directorySource, docPath, docTitle } = useReaderStore(
     useShallow((s) => ({
       docKind: s.docKind,
       mode: s.mode,
@@ -484,6 +484,7 @@ function Content({
       loading: s.loading,
       directorySource: s.directorySource,
       docPath: s.docPath,
+      docTitle: s.docTitle,
     })),
   );
   const plugins = useSettingsStore(useShallow((s) => s.settings.plugins));
@@ -544,6 +545,7 @@ function Content({
                 source={source}
                 sourceId={sourceId}
                 docPath={docPath}
+                docTitle={docTitle}
                 onParseError={onParseError}
               />
             ) : (

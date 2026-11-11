@@ -35,7 +35,7 @@
 - Transformed text reaches DOM strictly through `textContent` and the sanitized `enhance()` pipeline.
 - Maintained `onParseError(null)` cleanup in unmount effect.
 - Download names files `<stem>.json`, or `<stem>.jsonc` when comments remain in view (`hasComments === true`).
-- Added `source={source}` pass-through in `src/entrypoints/reader/App.tsx`.
+- Added `source`, `sourceId`, `docPath`, and `docTitle` pass-through in `src/entrypoints/reader/App.tsx`. Toolbar state is keyed on `sourceId` and `docPath` because local loads leave `source` empty; the download name falls back through `docPath`, `source`, then `docTitle`, since only folder-tree files carry a path.
 - Styled `.json-toolbar` in `src/styles/reader.css` and added `.json-toolbar` to the print exclusion rule (`display: none !important`).
 - Extended `tests/unit/json-view.test.tsx` with unit tests for open rule, reset on new source, preserved state on refresh, unescape reversion on refresh, stale transform abort, and rejected `transformJson` reporting.
 
@@ -57,7 +57,7 @@
 2. **Phase 2: docKind optional in CommandState**: Making `docKind` required in `CommandState` is blocked because `src/ui/toolbar.tsx` is outside the Phase 5 authorized file set.
 3. **Phase 3: parseError reset location**: Confirmed that `JsonView` clearing `parseError` on unmount (`onParseError(null)`) is sufficient and correct. Toolbar and download paths do not require controller-side reset because state is scoped per document and resets when navigating between sources.
 4. **Phase 4: Single source of truth for displayed text**: Ownership is strictly divided:
-   - On parse error: `prepareJson` error path owns the view and displays the exact original `sourceText` (preserving original line breaks and formatting under the error banner).
+   - On parse error: `prepareJson` error path owns the view and displays the BOM-stripped text that the banner's line and column refer to, preserving line breaks and formatting under the error banner. Download still writes the exact original `sourceText`.
    - On valid parse: `transformJson` (or `unescapeJson` when in unescaped mode) is the sole source of truth for the displayed text across every layout (Original, Beautify, Minify) and toggle. Line endings are consistently normalized to LF, avoiding any mixing of CRLF and LF texts.
 5. **Phase 4: sortKeys under original layout**: Sorting keys requires AST reconstruction and inherently emits formatted/compact output. Reflected in toolbar UX by providing `title={t('json.sortKeysDescription')}` ("Sort keys (formats as beautified)") on the Sort keys toggle.
 6. **Phase 4: RangeError on deeply nested input**: Wrapped both `transformJson` and `unescapeJson` in try/catch blocks within `JsonView`. Any caught rejection reports `{ message, line: 1, column: 1 }` via `onParseError` and displays the source text without throwing uncaught exceptions. Verified by unit test.

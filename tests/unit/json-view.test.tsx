@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { highlight } from '../../src/render/highlight';
 import * as jsonDocument from '../../src/lib/json-document';
 import * as enhanceModule from '../../src/render/enhance';
+import * as exportModule from '../../src/export/export';
 import { JsonView } from '../../src/ui/json-view';
 import type { MarkdownViewHandle } from '../../src/ui/markdown-view';
 
@@ -349,6 +350,37 @@ describe('JsonView component', () => {
     expect(container.querySelector('code')?.textContent).toBe('{\n  "b": 2\n}');
   });
 
+  it('proves a picked file with no path or source downloads under its title', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    const download = vi.spyOn(exportModule, 'downloadText').mockImplementation(() => {});
+
+    await act(async () => {
+      root.render(
+        <JsonView
+          ref={ref}
+          source=""
+          sourceId="local:report.json"
+          docPath={null}
+          docTitle="report.json"
+          text={'{\n  "a": 1\n}'}
+          kind="json"
+          onParseError={onParseError}
+        />,
+      );
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const downloadBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Download');
+    await act(async () => {
+      downloadBtn?.click();
+    });
+
+    expect(download).toHaveBeenCalledWith('report.json', expect.any(String), expect.any(String));
+  });
+
   it('proves a stale parse error does not reach onParseError after the document changed', async () => {
     const ref = createRef<MarkdownViewHandle>();
     const onParseError = vi.fn();
@@ -393,6 +425,9 @@ describe('JsonView component', () => {
     await act(async () => {
       root.render(<JsonView ref={ref} source="unesc-a.json" text='{"first": 1}' kind="json" onParseError={onParseError} />);
     });
+
+    // The first paint must have reached unescapeJson, or the pending rejection lands on the second document and is not stale.
+    await vi.waitFor(() => expect(jsonDocument.unescapeJson).toHaveBeenCalledTimes(1));
 
     vi.mocked(jsonDocument.unescapeJson).mockImplementation(real);
     await act(async () => {

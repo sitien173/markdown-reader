@@ -11,6 +11,7 @@ export interface JsonViewProps {
   source?: string | null;
   sourceId?: string | null;
   docPath?: string | null;
+  docTitle?: string | null;
   onParseError(error: JsonParseError | null): void;
 }
 
@@ -39,7 +40,7 @@ function sourceStem(source?: string | null): string {
 }
 
 export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function JsonView(
-  { text, kind, source, sourceId, docPath, onParseError },
+  { text, kind, source, sourceId, docPath, docTitle, onParseError },
   ref,
 ) {
   const codeContainer = useRef<HTMLDivElement>(null);
@@ -49,9 +50,9 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
   onParseErrorRef.current = onParseError;
   const kindRef = useRef(kind);
   kindRef.current = kind;
-  // The local picker, drop, and folder tree all leave source empty, so the download name comes from the path first.
-  const nameRef = useRef<string | null | undefined>(docPath || source);
-  nameRef.current = docPath || source;
+  // Only folder-tree files carry a path; the picker and drop leave both path and source empty and name the file in docTitle.
+  const nameRef = useRef<string | null | undefined>(docPath || source || docTitle);
+  nameRef.current = docPath || source || docTitle;
   const currentPromiseRef = useRef<Promise<void> | null>(null);
 
   const [options, setOptions] = useState<JsonViewOptions>(() => initialOptions(text));

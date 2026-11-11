@@ -275,10 +275,10 @@ test('Sort keys locks and checks Strip comments on JSONC', async ({ page, extens
   await expect(stripToggle).toHaveAttribute('aria-pressed', 'true');
   await expect(stripToggle).toBeDisabled();
 
-  // Content has sorted keys and comments removed
-  const text = (await page.locator('.md-content pre code').textContent()) ?? '';
-  expect(text).not.toContain('// leading comment');
-  expect(text).not.toContain('/* inline */');
+  // Content has sorted keys and comments removed. The repaint is async, so these must retry.
+  const code = page.locator('.md-content pre code');
+  await expect(code).not.toContainText('// leading comment');
+  await expect(code).not.toContainText('/* inline */');
 });
 
 test('Escape and Unescape round trip', async ({ page, extensionId }) => {
@@ -334,7 +334,9 @@ test('Download saves view with correct name and content', async ({ page, extensi
   await expect(page.locator('.md-content')).toBeVisible({ timeout: 20000 });
   const toolbar = page.locator('[data-slot="json-toolbar"]');
 
-  // While comments remain: filename is .jsonc
+  // While comments remain: filename is .jsonc. Wait for the first paint, since hasComments starts false.
+  const code = page.locator('.md-content pre code');
+  await expect(code).toContainText('// leading comment');
   const downloadPromise = page.waitForEvent('download');
   await toolbar.getByRole('button', { name: 'Download' }).click();
   const download = await downloadPromise;
@@ -342,6 +344,7 @@ test('Download saves view with correct name and content', async ({ page, extensi
 
   // Minify removes comments: filename becomes .json
   await toolbar.getByRole('button', { name: 'Minify' }).click();
+  await expect(code).not.toContainText('// leading comment');
   const downloadPromise2 = page.waitForEvent('download');
   await toolbar.getByRole('button', { name: 'Download' }).click();
   const download2 = await downloadPromise2;
