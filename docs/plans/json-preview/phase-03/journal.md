@@ -49,17 +49,51 @@ TASK_COMPLETE
 
 ## Quality Review
 
-<!-- Coordinator appends the independent review response here. -->
+Reviewer target `cc/claude-opus-medium`, range `refs/plans/json-preview/phase-03/base..952709e`. Job `dacd49c4-06ea-4809-8d78-040729792a32`; the first submit on `codex/terra-high` failed transiently, as on every earlier phase.
+
+The review returned FAIL on one blocking finding and three weak-test findings.
+
+The blocking finding confirmed a stale banner the Coordinator had raised independently. `JsonView` is the only writer of `parseError`, reporting `null` only on a successful parse, and its unmount cleanup only bumped the generation and aborted. `src/reader/controller.ts` never resets the field: `load`, `openFileHandle`, and the directory path reset `error` and `headings` only. Every way of leaving a JSON document unmounts `JsonView`, so opening an invalid `.json` and then any Markdown document left a parse-error banner with no Dismiss button over unrelated content.
+
+The three non-blocking findings were all tests that passed regardless of the behavior they claimed to prove: an `innerHTML` emptiness check that `root.unmount()` satisfies on its own, leaving the abort untested; a banner-ordering test that never asserted the document text and ran under `docKind: 'markdown'`; and a redirect-off end-to-end check gated only on a fixed one-second wait.
+
+### Review Fix Cycle 1
+
+Fixed in `6306674`, by the Coordinator rather than a worker, since the review specified each change precisely.
+
+| Finding | Fix |
+| --- | --- |
+| Blocking, stale banner | `JsonView` unmount cleanup calls `onParseErrorRef.current(null)` |
+| Untested abort | New test spies on `enhance`, captures the `AbortSignal`, and asserts `aborted` after unmount |
+| Banner ordering | Added an assertion that the document still shows the source text |
+| Redirect timing | Added `waitForLoadState('networkidle')` and a payload assertion |
+
+The reviewer's gating alternative, `isJson ? parseError : null` in `Banners`, was rejected as recommended: it hides the symptom and leaves stale state in the store.
+
+Two reviewer suggestions were adapted rather than taken literally. The banner-ordering test keeps `docKind: 'markdown'` with an injected `parseError`, because switching it to `'json'` would let the real `JsonView` overwrite the injected error asynchronously and make the exact message assertion racy. The JSON path it would have covered is instead exercised by the new stale-banner regression test, which uses `vi.waitFor` and is therefore timing-safe.
+
+Each fix was verified by mutation. Reverting the `onParseError(null)` line fails both `proves unmount aborts so a late result writes nothing` and `clears parseError when the reader leaves a JSON document so no stale banner survives`. Removing `abortRef.current?.abort()` fails `proves unmount aborts the enhance signal`.
 
 ## Review Result
 
-- Spec Status: PENDING
-- Quality Status: PENDING
-- Debt: none
+- Spec Status: PASS. All four acceptance criteria hold. `JsonView` renders `.json` and `.jsonc` through `textContent` plus the sanitized `enhance()` path with no `innerHTML` from document text, produces no heading or TOC data, and guards stale results against both the DOM write and `onParseError`. `src/ui/markdown-view.tsx` is untouched.
+- Quality Status: PASS, after one fix cycle.
+- Debt:
+  - The 8 `tests/e2e/settings-layout.spec.ts` screenshot comparisons fail locally. `AGENTS.md` documents these as rendered on the `CI E2E` runner and divergent on local system fonts. This phase touched no settings UI, and the failures predate it. Owner: the `CI E2E` run on the pull request, which is the authority for these snapshots.
+  - `PLAN.md` Phase 3 task 3 words the requirement as `parseError` being "cleared on every load", which would live in `src/reader/controller.ts`. The unmount cleanup covers every observable path for this phase, so the controller was left alone rather than expanding the phase file set. Owner: Phase 5, to confirm the toolbar and download paths need no controller-side reset.
+
+## Verification Evidence
+
+Run fresh at `6306674`, one at a time:
+
+- `pnpm typecheck` -> exit 0.
+- `pnpm lint` -> exit 0, 0 errors, 208 warnings, 3 infos. Equal to the `c9c2800` baseline.
+- `pnpm test` -> 46 files, 624 tests passed. Phase 4 left 609.
+- `pnpm test:e2e` -> 189 passed, 8 failed, all 8 being the `settings-layout.spec.ts` snapshots recorded as debt above. All `json-preview.spec.ts` tests passed.
 
 ## Final Checkpoint
 
 - Phase base ref: refs/plans/json-preview/phase-03/base
-- Phase implementation ref: refs/plans/json-preview/phase-03/impl
+- Phase implementation ref: refs/plans/json-preview/phase-03/impl -> 6306674
 - Plan commit ref: pending
-- State checkpoint: temporary commit
+- State checkpoint: temporary commits 952709e and 6306674
