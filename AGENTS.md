@@ -27,7 +27,7 @@ Add `pnpm test:e2e` when the change touches UI, entry points, or extension behav
 
 ## Plans
 
-Multi-phase features live in `docs/plans/<feature>/` as `DESIGN.md`, `PLAN.md`, and `.handover.md`. Before resuming a feature, read its `.handover.md` for status and next action. `docs/plans/json-preview/` is drafted and awaiting approval; it is not implemented.
+Multi-phase features live in `docs/plans/<feature>/` as `DESIGN.md`, `PLAN.md`, and `.handover.md`. Before resuming a feature, read its `.handover.md` for status and next action. `docs/plans/json-preview/` is `DONE`; it landed on `feat/json-preview`.
 
 ## Commits and Pull Requests
 
