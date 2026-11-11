@@ -29,6 +29,17 @@ describe('link rewriting', () => {
     expect(doc.querySelector('a[href="https://example.test/"]')?.getAttribute('target')).toBe('_blank');
   });
 
+  it('marks .json and .jsonc links with data-md-link attribute', () => {
+    const html = render(
+      '[config](config.json) [schema](https://example.test/schema.jsonc) [text](notes.txt)',
+      'https://example.test/docs/readme.md',
+    ).html;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    expect(doc.querySelector('a[href$="config.json"]')?.hasAttribute('data-md-link')).toBe(true);
+    expect(doc.querySelector('a[href$="schema.jsonc"]')?.hasAttribute('data-md-link')).toBe(true);
+    expect(doc.querySelector('a[href$="notes.txt"]')?.hasAttribute('data-md-link')).toBe(false);
+  });
+
   it('resolves folder-relative links and renders unresolvable outside links as disabled', async () => {
     const doc = new DOMParser().parseFromString(
       '<a href="sub/target.md">inner</a><a href="../outside.md">outside</a><a href="https://example.com/ext.md">external</a>',
@@ -46,6 +57,15 @@ describe('link rewriting', () => {
     resolveFolderLinks(outside, 'readme.md');
     expect(outside.hasAttribute('href')).toBe(false);
     expect(outside.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('marks a folder-relative JSON link with data-md-link and data-folder-path', async () => {
+    const doc = new DOMParser().parseFromString('<a href="sub/data.json">data</a>', 'text/html');
+    const { resolveFolderLinks } = await import('../../src/render/links');
+    const link = doc.querySelector('a') as HTMLAnchorElement;
+    resolveFolderLinks(link, 'docs/readme.md');
+    expect(link.hasAttribute('data-md-link')).toBe(true);
+    expect(link.getAttribute('data-folder-path')).toBe('docs/sub/data.json');
   });
 
   it('cancels superseded image work with AbortSignal and revokes created URL immediately', async () => {

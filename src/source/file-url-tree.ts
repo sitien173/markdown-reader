@@ -1,5 +1,6 @@
 import { compareTreeNodes, type TreeNode } from './directory';
 import { createHidingRule, type GitignoreLevel } from './hidden';
+import { isJsonName } from '../lib/doc-kind';
 
 export interface FileUrlEntry {
   name: string;
@@ -200,8 +201,8 @@ export async function buildFileTreeLevel(
   const normFolder = normalizeDirUrl(folderUrl);
   const rawEntries = preloadedEntries ?? (await listDirectory(normFolder));
 
-  // Keep folders and .md/.markdown files
-  let filtered = rawEntries.filter((e) => e.isDir || /\.(?:md|markdown)$/i.test(e.name));
+  // Keep folders and .md/.markdown/.json/.jsonc files
+  let filtered = rawEntries.filter((e) => e.isDir || /\.(?:md|markdown)$/i.test(e.name) || isJsonName(e.name));
 
   if (!settings.showHiddenItems) {
     const chain = await fetchGitignoreChain(normFolder, chainBaseUrl, cache);

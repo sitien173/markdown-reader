@@ -12,6 +12,7 @@ beforeEach(() => {
 describe('reader store', () => {
   it('starts with documented defaults', () => {
     expect(get()).toMatchObject({
+      docKind: 'markdown',
       mode: 'read',
       source: '',
       docPath: null,
@@ -22,6 +23,7 @@ describe('reader store', () => {
       sidebarTab: 'contents',
       focusMode: false,
       error: '',
+      parseError: null,
       externalChange: false,
       conflict: false,
       dirty: false,
@@ -51,6 +53,20 @@ describe('reader store', () => {
     expect(parseMode(null)).toBe('read');
     expect(parseMode('edit')).toBe('edit');
   });
+
+  it('derives docKind from src and clamps mode to read for JSON files', () => {
+    window.history.replaceState(null, '', '/?src=a.json&mode=edit');
+    store = createReaderStore();
+    expect(get()).toMatchObject({ docKind: 'json', mode: 'read', source: 'a.json' });
+
+    window.history.replaceState(null, '', '/?src=config.jsonc&mode=split');
+    store = createReaderStore();
+    expect(get()).toMatchObject({ docKind: 'jsonc', mode: 'read', source: 'config.jsonc' });
+
+    window.history.replaceState(null, '', '/?src=doc.md&mode=edit');
+    store = createReaderStore();
+    expect(get()).toMatchObject({ docKind: 'markdown', mode: 'edit', source: 'doc.md' });
+  });
 });
 
 describe('store scope', () => {
@@ -62,6 +78,18 @@ describe('store scope', () => {
 });
 
 describe('banners selector', () => {
+  it('lists error then jsonError then external change when all are set', () => {
+    store.setState({
+      externalChange: true,
+      error: 'Boom',
+      parseError: { message: 'Invalid token', line: 1, column: 2 },
+    });
+    expect(selectBanners(get())).toEqual([
+      { kind: 'error', message: 'Boom' },
+      { kind: 'jsonError', message: 'Invalid token', line: 1, column: 2 },
+      { kind: 'externalChange' },
+    ]);
+  });
   it('lists error then external change when both are set', () => {
     store.setState({ externalChange: true, error: 'Boom' });
     expect(selectBanners(get())).toEqual([{ kind: 'error', message: 'Boom' }, { kind: 'externalChange' }]);

@@ -160,6 +160,109 @@ describe('reader shell render scope', () => {
     expect(spy.renders.toolbar).toBe(before.toolbar);
     expect(spy.renders.view).toBe(before.view);
   });
+
+  it('proves the JSON error banner renders above the original text and has no Retry button, and that the fetch-error banner still has Retry', async () => {
+    await act(async () => {
+      spy.store.setState({
+        text: '{"broken": }',
+        mountText: '{"broken": }',
+        parseError: { message: 'Unexpected token', line: 1, column: 11 },
+      });
+    });
+    await flush();
+
+    const bannerContainer = container.querySelector('[data-slot="status-banner"]');
+    const contentContainer = container.querySelector('[data-slot="reader-content"]');
+    expect(bannerContainer).not.toBeNull();
+    expect(contentContainer).not.toBeNull();
+    expect(
+      Boolean(
+        bannerContainer && contentContainer && bannerContainer.compareDocumentPosition(contentContainer) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(bannerContainer?.textContent).toContain('Unexpected token (line 1, column 11)');
+    expect(bannerContainer?.querySelector('button')).toBeNull();
+    // The banner sits above the document, and the document still shows the source text
+    expect(contentContainer?.textContent).toContain('{"broken": }');
+
+    await act(async () => {
+      spy.store.setState({
+        parseError: null,
+        error: 'Failed to fetch',
+      });
+    });
+    await flush();
+
+    expect(bannerContainer?.textContent).toContain('Failed to fetch');
+    const retryBtn = Array.from(bannerContainer?.querySelectorAll('button') ?? []).find((b) => b.textContent === 'Retry');
+    expect(retryBtn).toBeDefined();
+  });
+});
+
+describe('JSON preview rendering in App', () => {
+  it('shows Spinner with aria-label="Loading" for JSON document when loading', async () => {
+    await act(async () => {
+      spy.store.setState({ docKind: 'json', loading: true });
+    });
+    await flush();
+
+    const spinner = container.querySelector('[aria-label="Loading"]');
+    expect(spinner).not.toBeNull();
+    expect(container.querySelector('[aria-label="Loading Markdown"]')).toBeNull();
+  });
+
+  it('renders JsonView for JSON document and writes parseError into store', async () => {
+    await act(async () => {
+      spy.store.setState({
+        docKind: 'json',
+        loading: false,
+        text: '{"a": 1,}',
+        mountText: '{"a": 1,}',
+        source: 'file:///data.json',
+      });
+    });
+    await flush();
+
+    expect(container.querySelector('[data-testid="markdown"]')).toBeNull();
+    expect(container.querySelector('.md-content')).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(spy.store.getState().parseError).toEqual(
+        expect.objectContaining({
+          line: 1,
+          column: 9,
+        }),
+      );
+    });
+  });
+
+  it('clears parseError when the reader leaves a JSON document so no stale banner survives', async () => {
+    await act(async () => {
+      spy.store.setState({
+        docKind: 'json',
+        loading: false,
+        text: '{"a": 1,}',
+        mountText: '{"a": 1,}',
+        source: 'file:///data.json',
+      });
+    });
+    await flush();
+    await vi.waitFor(() => {
+      expect(spy.store.getState().parseError).not.toBeNull();
+    });
+
+    await act(async () => {
+      spy.store.setState({
+        docKind: 'markdown',
+        text: '# A',
+        mountText: '# A',
+        source: 'file:///a.md',
+      });
+    });
+    await flush();
+
+    expect(spy.store.getState().parseError).toBeNull();
+    expect(container.querySelector('[data-slot="status-banner"]')).toBeNull();
+  });
 });
 
 describe('reader shell render scope in read mode', () => {

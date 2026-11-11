@@ -12,6 +12,7 @@ const find = (id: CommandId) => {
   return command;
 };
 const withDoc = (patch: Partial<ReaderState> = {}): ReaderState => ({ ...base, text: '# Doc', ...patch });
+const withJsonDoc = (patch: Partial<ReaderState> = {}): ReaderState => ({ ...base, text: '{"key": "value"}', docKind: 'json', ...patch });
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/');
@@ -179,5 +180,37 @@ describe('Open URL check', () => {
   it('rejects empty and malformed input', () => {
     expect(parseOpenUrl('   ')).toEqual({ ok: false, message: 'Enter a Markdown URL' });
     expect(parseOpenUrl('not a url')).toEqual({ ok: false, message: 'Enter a valid URL' });
+  });
+});
+
+describe('JSON command availability', () => {
+  it('disables save, mode-edit, mode-split, toggle-raw, and export-html for JSON documents', () => {
+    const jsonState = withJsonDoc({ writable: true, mode: 'read' });
+    expect(find('save').available(jsonState)).toBe(false);
+    expect(find('mode-edit').available(jsonState)).toBe(false);
+    expect(find('mode-split').available(jsonState)).toBe(false);
+    expect(find('toggle-raw').available(jsonState)).toBe(false);
+    expect(find('export-html').available(jsonState)).toBe(false);
+  });
+
+  it('keeps print, mode-read, focus-mode, and open commands available for JSON documents', () => {
+    const jsonState = withJsonDoc({ writable: true, mode: 'read' });
+    expect(find('print').available(jsonState)).toBe(true);
+    expect(find('mode-read').available(jsonState)).toBe(true);
+    expect(find('focus-mode').available(jsonState)).toBe(true);
+    expect(find('open-file').available(jsonState)).toBe(true);
+    expect(find('open-folder').available(jsonState)).toBe(true);
+    expect(find('open-url').available(jsonState)).toBe(true);
+    expect(find('command-palette').available(jsonState)).toBe(true);
+  });
+
+  it('also disables those commands for jsonc kind', () => {
+    const jsoncState = withJsonDoc({ docKind: 'jsonc', writable: true, mode: 'read' });
+    expect(find('save').available(jsoncState)).toBe(false);
+    expect(find('mode-edit').available(jsoncState)).toBe(false);
+    expect(find('mode-split').available(jsoncState)).toBe(false);
+    expect(find('toggle-raw').available(jsoncState)).toBe(false);
+    expect(find('export-html').available(jsoncState)).toBe(false);
+    expect(find('print').available(jsoncState)).toBe(true);
   });
 });

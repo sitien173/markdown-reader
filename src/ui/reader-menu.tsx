@@ -29,7 +29,7 @@ const GROUPS: CommandId[][] = [
 
 export function ReaderMenu({ commands }: { commands: Command[] }) {
   const t = useT();
-  const state = useReaderStore(useShallow((s) => ({ text: s.text, writable: s.writable, mode: s.mode })));
+  const state = useReaderStore(useShallow((s) => ({ text: s.text, writable: s.writable, mode: s.mode, docKind: s.docKind })));
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

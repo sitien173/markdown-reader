@@ -1,5 +1,6 @@
 import type { Source } from './types';
 import { watchFileHandle, type WatchEvents } from './watch';
+import { isJsonName } from '../lib/doc-kind';
 
 export class SaveConflictError extends Error {
   constructor() {
@@ -19,7 +20,12 @@ export class FileHandleSource implements Source {
   async pick(): Promise<void> {
     const picker = (window as PickerWindow).showOpenFilePicker;
     if (!picker) throw new Error('File picker is not available');
-    const [handle] = await picker({ types: [{ description: 'Markdown files', accept: { 'text/markdown': ['.md', '.markdown'] } }] });
+    const [handle] = await picker({
+      types: [
+        { description: 'Markdown files', accept: { 'text/markdown': ['.md', '.markdown'] } },
+        { description: 'JSON files', accept: { 'application/json': ['.json', '.jsonc'] } },
+      ],
+    });
     if (!handle) throw new Error('No file selected');
     this.handle = handle;
   }
@@ -66,7 +72,7 @@ export class FileHandleSource implements Source {
 }
 
 export function isValidMarkdownFile(filename: string): boolean {
-  return /\.(?:md|markdown)$/i.test(filename);
+  return /\.(?:md|markdown)$/i.test(filename) || isJsonName(filename);
 }
 
 export function dropFileIdentity(file: { name: string; size: number; lastModified: number }): string {

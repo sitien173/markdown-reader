@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SaveConflictDialog } from '../../src/ui/save-conflict-dialog';
-import { FileHandleSource, SaveConflictError } from '../../src/source/file-handle';
+import { FileHandleSource, isValidMarkdownFile, SaveConflictError } from '../../src/source/file-handle';
 
 function fakeHandle(lastModified: number) {
   const createWritable = vi.fn(async () => ({ write: vi.fn(async () => {}), close: vi.fn(async () => {}) }));
@@ -52,5 +52,29 @@ describe('FileHandleSource.write', () => {
     expect(onOverwrite).not.toHaveBeenCalled();
     act(() => root.unmount());
     container.remove();
+  });
+
+  it('passes both Markdown and JSON file types to showOpenFilePicker', async () => {
+    const showOpenFilePicker = vi.fn(async () => [
+      { getFile: async () => ({ lastModified: 100, text: async () => '{}' }), name: 'data.json' } as unknown as FileSystemFileHandle,
+    ]);
+    vi.stubGlobal('showOpenFilePicker', showOpenFilePicker);
+    const source = new FileHandleSource();
+    await source.pick();
+    expect(showOpenFilePicker).toHaveBeenCalledWith({
+      types: [
+        { description: 'Markdown files', accept: { 'text/markdown': ['.md', '.markdown'] } },
+        { description: 'JSON files', accept: { 'application/json': ['.json', '.jsonc'] } },
+      ],
+    });
+  });
+
+  it('isValidMarkdownFile accepts .json and .jsonc along with markdown files', () => {
+    expect(isValidMarkdownFile('data.json')).toBe(true);
+    expect(isValidMarkdownFile('config.jsonc')).toBe(true);
+    expect(isValidMarkdownFile('readme.md')).toBe(true);
+    expect(isValidMarkdownFile('doc.markdown')).toBe(true);
+    expect(isValidMarkdownFile('image.png')).toBe(false);
+    expect(isValidMarkdownFile('notes.txt')).toBe(false);
   });
 });

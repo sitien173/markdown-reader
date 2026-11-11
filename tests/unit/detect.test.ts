@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-let shouldRedirectMarkdown: (contentType: string, pathname: string, flags?: { enabled: boolean; renderTxt: boolean }) => boolean;
+let shouldRedirectMarkdown: (
+  contentType: string,
+  pathname: string,
+  flags?: { enabled: boolean; renderTxt: boolean; renderJson?: boolean },
+) => boolean;
 beforeAll(async () => {
   vi.stubGlobal('defineContentScript', (config: unknown) => config);
   ({ shouldRedirectMarkdown } = await import('../../src/entrypoints/detect.content'));
@@ -30,5 +34,30 @@ describe('Markdown navigation detector', () => {
   it('does not redirect a text/plain response for a non-.txt path', () => {
     expect(shouldRedirectMarkdown('text/plain', '/notes', { enabled: true, renderTxt: true })).toBe(false);
     expect(shouldRedirectMarkdown('text/plain', '/notes.txt.html', { enabled: true, renderTxt: true })).toBe(false);
+  });
+  it('redirects .json and .jsonc only when Enable and Preview .json are on', () => {
+    const on = { enabled: true, renderTxt: false, renderJson: true };
+    expect(shouldRedirectMarkdown('application/json', '/a.json', on)).toBe(true);
+    expect(shouldRedirectMarkdown('application/json', '/A.JSONC', on)).toBe(true);
+    expect(shouldRedirectMarkdown('application/json', '/a.json', { ...on, renderJson: false })).toBe(false);
+    expect(shouldRedirectMarkdown('application/json', '/a.json', { ...on, enabled: false })).toBe(false);
+    expect(shouldRedirectMarkdown('application/json', '/a.json', { enabled: true, renderTxt: true })).toBe(false);
+    expect(shouldRedirectMarkdown('application/json', '/a.json')).toBe(false);
+  });
+  it('accepts each JSON content type and rejects text/html', () => {
+    const on = { enabled: true, renderTxt: false, renderJson: true };
+    for (const type of ['application/json', 'text/json', 'text/plain', '', 'application/ld+json', 'application/vnd.api+json']) {
+      expect(shouldRedirectMarkdown(type, '/a.json', on)).toBe(true);
+    }
+    expect(shouldRedirectMarkdown('text/html', '/a.json', on)).toBe(false);
+    expect(shouldRedirectMarkdown('application/json', '/a.json.html', on)).toBe(false);
+    expect(shouldRedirectMarkdown('application/json', '/a', on)).toBe(false);
+  });
+  it('keeps Markdown and .txt results unchanged when Preview .json is on', () => {
+    const on = { enabled: true, renderTxt: true, renderJson: true };
+    expect(shouldRedirectMarkdown('text/plain', '/readme.md', on)).toBe(true);
+    expect(shouldRedirectMarkdown('application/json', '/readme.md', on)).toBe(false);
+    expect(shouldRedirectMarkdown('text/plain', '/notes.txt', on)).toBe(true);
+    expect(shouldRedirectMarkdown('application/json', '/notes.txt', on)).toBe(false);
   });
 });

@@ -465,4 +465,37 @@ describe('reader App file-url tree UI', () => {
     expect(byText('p', 'No folder opened.')).toBeTruthy();
     expect(byText('p', 'Allow access to file URLs must be enabled.')).toBeTruthy();
   });
+
+  it('hides the Contents toggle and shows the Files panel for a JSON document', async () => {
+    window.history.replaceState(null, '', '/?src=https%3A%2F%2Fexample.com%2Fdoc.json&mode=read');
+    await act(async () => {
+      root.render(<App key="json-sidebar" />);
+    });
+    await flush();
+
+    // Contents toggle item is absent
+    const contentsToggle = container.ownerDocument.querySelector('[aria-label="Sidebar view"] [aria-label="Outline"]');
+    expect(contentsToggle).toBeNull();
+
+    // Files toggle item is present
+    const filesToggle = container.ownerDocument.querySelector('[aria-label="Sidebar view"] [aria-label="Files"]');
+    expect(filesToggle).not.toBeNull();
+
+    // Files panel is rendered
+    expect(container.ownerDocument.querySelector('.reader-files-empty')).not.toBeNull();
+  });
+
+  it('shows both Contents and Files toggles for a Markdown document', async () => {
+    window.history.replaceState(null, '', '/?src=https%3A%2F%2Fexample.com%2Fdoc.md&mode=read');
+    await act(async () => {
+      root.render(<App key="md-sidebar" />);
+    });
+    await flush();
+
+    const contentsToggle = container.ownerDocument.querySelector('[aria-label="Sidebar view"] [aria-label="Outline"]');
+    expect(contentsToggle).not.toBeNull();
+
+    const filesToggle = container.ownerDocument.querySelector('[aria-label="Sidebar view"] [aria-label="Files"]');
+    expect(filesToggle).not.toBeNull();
+  });
 });

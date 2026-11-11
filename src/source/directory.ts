@@ -3,6 +3,7 @@ import { watchDirectory, type DirectoryWatchEvents } from './watch';
 import { SaveConflictError } from './file-handle';
 import { createHidingRule, type GitignoreLevel } from './hidden';
 import { useSettingsStore } from '../store/settings-store';
+import { isJsonName } from '../lib/doc-kind';
 
 export type FileNode = {
   kind: 'file';
@@ -92,7 +93,7 @@ export async function buildTree(
       if (isHidden(entryPath, false)) {
         continue;
       }
-      if (/\.(?:md|markdown)$/i.test(entry.name)) {
+      if (/\.(?:md|markdown)$/i.test(entry.name) || isJsonName(entry.name)) {
         nodes.push({
           kind: 'file',
           name: entry.name,
@@ -279,7 +280,7 @@ export class DirectorySource implements Source {
       return { href, isMd: false };
     }
     if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
-      const isMd = /\.(?:md|markdown)$/i.test(href);
+      const isMd = /\.(?:md|markdown)$/i.test(href) || isJsonName(href);
       return { href, isMd, target: '_blank' };
     }
 
@@ -289,8 +290,9 @@ export class DirectorySource implements Source {
     if (isOutside) {
       if (fallbackBaseUrl) {
         try {
-          const resolved = new URL(href, fallbackBaseUrl).href;
-          const isMd = /\.(?:md|markdown)$/i.test(new URL(resolved).pathname);
+          const url = new URL(href, fallbackBaseUrl);
+          const resolved = url.href;
+          const isMd = /\.(?:md|markdown)$/i.test(url.pathname) || isJsonName(url.pathname);
           return { href: resolved, isMd };
         } catch {
           return { href: '', isMd: false, disabled: true };
@@ -299,7 +301,7 @@ export class DirectorySource implements Source {
       return { href: '', isMd: false, disabled: true };
     }
 
-    const isMd = /\.(?:md|markdown)$/i.test(path);
+    const isMd = /\.(?:md|markdown)$/i.test(path) || isJsonName(path);
     return {
       href: path,
       isMd,

@@ -11,6 +11,7 @@ export type Settings = {
     enabled: boolean;
     outlineCollapsing: boolean;
     renderTxt: boolean;
+    renderJson: boolean;
     autoRefresh: boolean;
     autoRefreshRemote: boolean;
     autoRefreshIntervalSec: number;
@@ -62,6 +63,7 @@ export const defaultSettings: Settings = {
     enabled: true,
     outlineCollapsing: false,
     renderTxt: false,
+    renderJson: false,
     autoRefresh: true,
     autoRefreshRemote: false,
     autoRefreshIntervalSec: 1,
@@ -111,6 +113,7 @@ const generalSchema = z.object({
   enabled: z.catch(z.boolean(), defaultSettings.general.enabled),
   outlineCollapsing: z.catch(z.boolean(), defaultSettings.general.outlineCollapsing),
   renderTxt: z.catch(z.boolean(), defaultSettings.general.renderTxt),
+  renderJson: z.catch(z.boolean(), defaultSettings.general.renderJson),
   autoRefresh: z.catch(z.boolean(), defaultSettings.general.autoRefresh),
   autoRefreshRemote: z.catch(z.boolean(), defaultSettings.general.autoRefreshRemote),
   autoRefreshIntervalSec: z.catch(

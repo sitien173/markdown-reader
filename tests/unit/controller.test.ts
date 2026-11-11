@@ -804,3 +804,162 @@ describe('controller file-url folder tree', () => {
     expect(get().docPath).toBe('other.md');
   });
 });
+
+describe('JSON documents in controller', () => {
+  it('drop accepts .json files and sets docKind to json with read-only rules', async () => {
+    const fakeJson = fakeFileHandle('data.json', '{"hello":"world"}');
+    const item = {
+      kind: 'file',
+      getAsFileSystemHandle: async () => fakeJson.handle,
+    } as unknown as DataTransferItem;
+    await c.drop(item);
+    expect(get().docKind).toBe('json');
+    expect(get().text).toBe('{"hello":"world"}');
+    expect(get().mode).toBe('read');
+    expect(get().writable).toBe(false);
+    expect(get().dirty).toBe(false);
+  });
+
+  function stubCapturedText(url: string) {
+    const sessionGet = vi.fn(async (key: string) => ({
+      [key]: { url, text: 'captured text should be ignored', ts: Date.now() },
+    }));
+    vi.stubGlobal('browser', {
+      storage: {
+        local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
+        session: { get: sessionGet, remove: vi.fn(async () => undefined) },
+      },
+    });
+    return sessionGet;
+  }
+
+  it('ignores captured session text and reads the URL for JSON documents', async () => {
+    const jsonUrl = 'https://example.com/payload.json';
+    const sessionGet = stubCapturedText(jsonUrl);
+    ctl.urlRead = async (url) => `fetched url body of ${url}`;
+    await c.load(jsonUrl);
+    expect(sessionGet).toHaveBeenCalled();
+    expect(get().docKind).toBe('json');
+    expect(get().text).toBe('fetched url body of https://example.com/payload.json');
+  });
+
+  it('uses captured session text for a Markdown URL with the same entry shape', async () => {
+    const mdUrl = 'https://example.com/payload.md';
+    stubCapturedText(mdUrl);
+    ctl.urlRead = async (url) => `fetched url body of ${url}`;
+    await c.load(mdUrl);
+    expect(get().docKind).toBe('markdown');
+    expect(get().text).toBe('captured text should be ignored');
+  });
+
+  it('does not restore a stored draft for JSON and keeps dirty false', async () => {
+    const jsonUrl = 'https://example.com/draft-test.json';
+    const localGet = vi.fn(async (_key: string) => ({
+      [`markdown-reader:draft:${jsonUrl}`]: '{"draft": "unsaved draft text"}',
+    }));
+    vi.stubGlobal('browser', {
+      storage: {
+        local: { get: localGet, set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
+        session: { get: vi.fn(async () => ({})), remove: vi.fn(async () => undefined) },
+      },
+    });
+    ctl.urlRead = async () => '{"draft": "original disk text"}';
+    await c.load(jsonUrl);
+    await flush();
+    expect(get().docKind).toBe('json');
+    expect(get().text).toBe('{"draft": "original disk text"}');
+    expect(get().dirty).toBe(false);
+  });
+
+  it('switches mode from split to read when opening a JSON document', async () => {
+    c.setMode('split');
+    expect(get().mode).toBe('split');
+    await c.load('https://example.com/data.json');
+    expect(get().docKind).toBe('json');
+    expect(get().mode).toBe('read');
+  });
+
+  it('ignores setMode and edit calls for JSON documents', async () => {
+    await c.load('https://example.com/data.json');
+    expect(get().docKind).toBe('json');
+    expect(get().mode).toBe('read');
+
+    c.setMode('edit');
+    expect(get().mode).toBe('read');
+
+    c.setMode('split');
+    expect(get().mode).toBe('read');
+
+    c.edit('{"tampered": true}');
+    expect(get().dirty).toBe(false);
+    expect(get().text).toBe('body of https://example.com/data.json');
+  });
+
+  it('leaves no stale kind when navigating between markdown and JSON documents', async () => {
+    await c.load('https://example.com/doc.md');
+    expect(get().docKind).toBe('markdown');
+
+    await c.load('https://example.com/doc.json');
+    expect(get().docKind).toBe('json');
+    expect(get().mode).toBe('read');
+
+    await c.load('https://example.com/doc2.md');
+    expect(get().docKind).toBe('markdown');
+  });
+
+  it('opens a .json handle read-only and never writes on save', async () => {
+    const file = fakeFileHandle('data.json', '{"a":1}');
+    const createWritable = vi.fn(file.handle.createWritable.bind(file.handle));
+    (file.handle as unknown as { createWritable: typeof createWritable }).createWritable = createWritable;
+    await c.openFileHandle(file.handle);
+    expect(get().docKind).toBe('json');
+    expect(get().writable).toBe(false);
+    expect(get().mode).toBe('read');
+    await c.save();
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(file.text()).toBe('{"a":1}');
+  });
+
+  it('selectTreeFile tracks the kind of each selected entry without stale state', async () => {
+    ctl.files['c.json'] = '{"c":1}';
+    ctl.stamps['c.json'] = 300;
+    await c.selectTreeFile('c.json');
+    expect(get().docKind).toBe('json');
+    expect(get().writable).toBe(false);
+    expect(get().mode).toBe('read');
+    await c.selectTreeFile('a.md');
+    expect(get().docKind).toBe('markdown');
+    expect(get().writable).toBe(true);
+  });
+
+  it('never stores a draft key while a JSON source is open', async () => {
+    const local = {
+      get: vi.fn(async () => ({})),
+      set: vi.fn(async (_items: Record<string, unknown>) => undefined),
+      remove: vi.fn(async () => undefined),
+    };
+    vi.stubGlobal('browser', { storage: { local, session: { get: vi.fn(async () => ({})), remove: vi.fn(async () => undefined) } } });
+    const draftKeys = () =>
+      local.set.mock.calls.flatMap(([items]) => Object.keys(items)).filter((k) => k.startsWith('markdown-reader:draft:'));
+    await c.load('https://example.com/data.json');
+    vi.useFakeTimers();
+    try {
+      c.edit('{"tampered": true}');
+      vi.advanceTimersByTime(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush();
+    expect(draftKeys()).toEqual([]);
+    // Control: the same probe sees a draft write for a Markdown source.
+    await c.load('https://example.com/data.md');
+    vi.useFakeTimers();
+    try {
+      c.edit('# edited');
+      vi.advanceTimersByTime(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(draftKeys()).toHaveLength(1);
+  });
+});

@@ -20,6 +20,7 @@ import {
   prefixTreeNodes,
 } from '../source/file-url-tree';
 import { createReaderStore, type Mode, type ReaderStore } from '../store/reader-store';
+import { docKindFromName } from '../lib/doc-kind';
 
 type Active = FileHandleSource | FileUrlSource | UrlSource | DirectorySource;
 
@@ -82,6 +83,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
   function applyText(value: string, id: string, title?: string, loading?: boolean) {
     sourceId = id;
     draft = value;
+    const isMarkdown = state().docKind === 'markdown';
     set((s) => ({
       dirty: false,
       text: value,
@@ -89,9 +91,12 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       loadId: s.loadId + 1,
       sourceId: id,
       docTitle: title ?? s.docTitle,
+      ...(!isMarkdown ? { mode: 'read', writable: false } : {}),
       ...(loading === undefined ? {} : { loading }),
     }));
     saver?.cancel();
+    saver = null;
+    if (!isMarkdown) return;
     const storageKey = draftKey(id);
     saver = createDraftSaver(browser.storage.local, storageKey, 1000);
     const gen = sourceGen;
@@ -153,14 +158,15 @@ export function createController(store: ReaderStore = createReaderStore(), notif
   function setActive(next: FileHandleSource | FileUrlSource | UrlSource | null) {
     stopWatch();
     active = next;
-    set({ writable: next instanceof FileHandleSource, externalChange: false });
+    set({ writable: state().docKind === 'markdown' && next instanceof FileHandleSource, externalChange: false });
     startWatch();
   }
 
   function setActiveDirectory(dirSource: DirectorySource, filePath: string | null) {
     stopWatch();
     active = dirSource;
-    set({ writable: Boolean(filePath), externalChange: false });
+    const isMarkdown = (filePath ? docKindFromName(filePath) : state().docKind) === 'markdown';
+    set({ writable: isMarkdown && Boolean(filePath), externalChange: false });
     startWatch();
   }
 
@@ -226,6 +232,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
   }
 
   async function save() {
+    if (state().docKind !== 'markdown') return;
     const current = active;
     if (!(current instanceof FileHandleSource || current instanceof DirectorySource) || stamp === null) return;
     const written = draft;
@@ -250,6 +257,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
   }
 
   async function overwrite() {
+    if (state().docKind !== 'markdown') return;
     const current = active;
     if (!(current instanceof FileHandleSource || current instanceof DirectorySource)) return;
     set({ conflict: false });
@@ -357,7 +365,10 @@ export function createController(store: ReaderStore = createReaderStore(), notif
 
     stopWatch();
     active = null;
+    const kind = docKindFromName(url);
     set({
+      docKind: kind,
+      ...(kind !== 'markdown' ? { mode: 'read' } : {}),
       writable: false,
       externalChange: false,
       directorySource: null,
@@ -377,7 +388,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       const { charsetCompat } = useSettingsStore.getState().settings.general;
       const fileSource = parsed.protocol === 'file:' ? new FileUrlSource(url, charsetCompat) : null;
       // Captured page text is already decoded by the browser, so charset compatibility re-reads the file bytes instead.
-      const capturedText = fileSource && charsetCompat ? undefined : usableCapturedText(entry, url);
+      const capturedText = (fileSource && charsetCompat) || kind !== 'markdown' ? undefined : usableCapturedText(entry, url);
       const source = fileSource ?? new UrlSource(url, charsetCompat);
       const value = capturedText ?? (await source.read());
       if (!isCurrent(gen, null, loadId)) return;
@@ -408,7 +419,17 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       active = null;
       ++treeGen;
       ++reRootGen;
-      set({ writable: false, externalChange: false, directorySource: null, docPath: null, fileTree: null, fileAccessError: false });
+      const kind = docKindFromName(handle.name);
+      set({
+        docKind: kind,
+        ...(kind !== 'markdown' ? { mode: 'read' } : {}),
+        writable: false,
+        externalChange: false,
+        directorySource: null,
+        docPath: null,
+        fileTree: null,
+        fileAccessError: false,
+      });
       stamp = diskStamp;
       setActive(picked);
       set({ source: '' });
@@ -468,11 +489,16 @@ export function createController(store: ReaderStore = createReaderStore(), notif
         const diskStamp = await dirSource.diskStamp(first.path);
         if (!isLive(gen)) return;
         stamp = diskStamp;
-        set({ docPath: first.path });
+        const kind = docKindFromName(first.path);
+        set({
+          docKind: kind,
+          ...(kind !== 'markdown' ? { mode: 'read' } : {}),
+          docPath: first.path,
+        });
         setActiveDirectory(dirSource, first.path);
         applyText(textValue, dirSource.identity, baseName(first.path));
       } else {
-        set({ docPath: null });
+        set({ docKind: 'markdown', docPath: null });
         setActiveDirectory(dirSource, null);
         applyText('', `folder:${handle.name}:empty`, handle.name);
       }
@@ -508,7 +534,12 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       const diskStamp = await directorySource.diskStamp(filePath);
       if (!isCurrent(gen, previous, previousId)) return;
       stamp = diskStamp;
-      set({ docPath: filePath });
+      const kind = docKindFromName(filePath);
+      set({
+        docKind: kind,
+        ...(kind !== 'markdown' ? { mode: 'read' } : {}),
+        docPath: filePath,
+      });
       setActiveDirectory(directorySource, filePath);
       applyText(textValue, directorySource.identity, baseName(filePath));
       set({ headings: [], error: '' });
@@ -540,7 +571,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       if (!isCurrent(gen, previous, previousId)) return;
       if (file) {
         if (!isValidMarkdownFile(file.name)) {
-          set({ error: 'Only Markdown files (.md, .markdown) are supported' });
+          set({ error: 'Only Markdown and JSON files are supported' });
           return;
         }
         const value = await file.text();
@@ -549,7 +580,13 @@ export function createController(store: ReaderStore = createReaderStore(), notif
         active = null;
         ++treeGen;
         ++reRootGen;
-        set({ writable: false, externalChange: false });
+        const kind = docKindFromName(file.name);
+        set({
+          docKind: kind,
+          ...(kind !== 'markdown' ? { mode: 'read' } : {}),
+          writable: false,
+          externalChange: false,
+        });
         setActive(null);
         set({ directorySource: null, docPath: null, headings: [], fileTree: null, fileAccessError: false });
         applyText(value, dropFileIdentity(file), file.name);
@@ -566,12 +603,14 @@ export function createController(store: ReaderStore = createReaderStore(), notif
 
   /** Keystroke path: no React state beyond the one-time dirty flip. */
   function edit(value: string) {
+    if (state().docKind !== 'markdown') return;
     draft = value;
     if (!state().dirty) set({ dirty: true });
     saver?.update(value);
   }
 
   function setMode(next: Mode) {
+    if (state().docKind !== 'markdown') return;
     if (next !== 'edit') set({ mountText: draft });
     set({ text: draft, mode: next });
     const url = new URL(window.location.href);

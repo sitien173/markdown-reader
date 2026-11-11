@@ -115,7 +115,7 @@ describe('DirectorySource', () => {
       subDir.setFile('internals.markdown', '# Internals');
 
       const emptyDir = root.setDirectory('empty-dir');
-      emptyDir.setFile('not-md.json', '{}');
+      emptyDir.setFile('not-md.txt', 'txt');
 
       const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
       const tree = await source.getTree();
@@ -145,6 +145,21 @@ describe('DirectorySource', () => {
       const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
       const tree = await source.getTree();
       expect(tree.map((n) => n.name)).toEqual(['README.md', 'readme.md']);
+    });
+
+    it('includes .json and .jsonc files in the tree and preserves folders containing only JSON', async () => {
+      const root = new FakeFileSystemDirectoryHandle('root');
+      root.setFile('data.json', '{}');
+      root.setFile('config.jsonc', '// config');
+      const jsonDir = root.setDirectory('json-only');
+      jsonDir.setFile('package.json', '{}');
+
+      const source = new DirectorySource(root as unknown as FileSystemDirectoryHandle);
+      const tree = await source.getTree();
+
+      expect(tree.map((n) => n.name)).toEqual(['json-only', 'config.jsonc', 'data.json']);
+      const dirNode = tree[0] as { kind: 'directory'; children: TreeNode[] };
+      expect(dirNode.children.map((n) => n.name)).toEqual(['package.json']);
     });
 
     describe('picker hiding and pruning', () => {
@@ -371,6 +386,17 @@ describe('DirectorySource', () => {
       const res2 = source.resolveLink('../readme.markdown');
       expect(res2.isMd).toBe(true);
       expect(res2.folderPath).toBe('readme.markdown');
+
+      const resJson = source.resolveLink('config.json');
+      expect(resJson.isMd).toBe(true);
+      expect(resJson.folderPath).toBe('docs/config.json');
+
+      const resJsonc = source.resolveLink('settings.jsonc');
+      expect(resJsonc.isMd).toBe(true);
+      expect(resJsonc.folderPath).toBe('docs/settings.jsonc');
+
+      const resAbsoluteJson = source.resolveLink('https://example.com/schema.json');
+      expect(resAbsoluteJson.isMd).toBe(true);
     });
 
     it('resolves relative images to object URLs and creates object URL', async () => {
