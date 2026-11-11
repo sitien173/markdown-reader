@@ -530,6 +530,10 @@ describe('JsonView component', () => {
     await act(async () => {
       root.render(<JsonView ref={ref} text='{"first": 1}' kind="json" onParseError={onParseError} />);
     });
+
+    // The first paint must have reached transformJson, or the second render consumes the mock meant for the first.
+    await vi.waitFor(() => expect(jsonDocument.transformJson).toHaveBeenCalledTimes(1));
+
     await act(async () => {
       root.render(<JsonView ref={ref} text='{"second": 2}' kind="json" onParseError={onParseError} />);
     });
@@ -546,6 +550,8 @@ describe('JsonView component', () => {
     });
 
     expect(readyResolved).toBe(false);
+    // The stale result must not reach the DOM at all, not merely be overwritten by the newer one.
+    expect(container.querySelector('code')?.textContent).not.toBe('{"first": 1}');
 
     // Resolve second (latest)
     resolveSecond({ text: '{"second": 2}', hasComments: false });

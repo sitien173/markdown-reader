@@ -77,3 +77,6 @@ TASK_COMPLETE
 - Phase implementation ref: refs/plans/json-preview/phase-05/impl
 - Plan commit ref: pending
 - State checkpoint: temporary commit
+
+# COORDINATOR NOTE
+The `prompt.md` scope limited `src/entrypoints/reader/App.tsx` to passing the existing `source` value as one new prop. Review found that insufficient: local loads set `source` to an empty string, so the toolbar document key collapsed to a single value across every local file and the download name always fell back to `document`. Three further props were authorized and wired, `sourceId`, `docPath`, and `docTitle`, matching the document identity pattern already used for `TocPanel` at `App.tsx:343`. The journal entry at line 26 predates this and describes only the `source` prop.
