@@ -67,9 +67,13 @@ TASK_COMPLETE
 
 ## Review Result
 
-- Spec Status: PENDING
-- Quality Status: PENDING
-- Debt: none
+- Spec Status: PASS, at 33853bb after three fix cycles
+- Quality Status: PASS, at 33853bb after three fix cycles
+- Review cycles: four passes on `cc/claude-opus-medium`. Pass 1 FAIL on three blocking findings: the toolbar document key collapsed for local documents, the `unescapeJson` rejection path lacked a generation guard, and the parse-error branch reported before its generation check. Pass 2 FAIL on three: picked and dropped files still downloaded as `document.json`, one new unit test was order-dependent, and two e2e tests raced the async repaint. Pass 3 FAIL on one: `proves abort of a stale transformJson` was order-dependent and passed with its guard removed. Pass 4 PASS on both verdicts.
+- Debt carried out of the phase:
+  - For a `file://` URL outside the current tree, `docPath` starts null and an async listing fills it in, changing the document key and resetting the toolbar once. The reset applies the open rule to the loaded text, so only user toolbar changes made before the listing finishes are lost. `TocPanel` shares this behavior through the same key.
+  - `sourceStem` tries `new URL()` first, so a bare file name whose prefix is a valid URL scheme, such as `notes:v2.json`, downloads as `v2.json`. Names with spaces or slashes before the colon throw and fall back correctly. Affects the download name only.
+  - The inherited debt items are numbered differently in `prompt.md` and `notes.md`. All seven are resolved and each carries its phase label and content.
 
 ## Final Checkpoint
 
@@ -79,4 +83,4 @@ TASK_COMPLETE
 - State checkpoint: temporary commit
 
 # COORDINATOR NOTE
-The `prompt.md` scope limited `src/entrypoints/reader/App.tsx` to passing the existing `source` value as one new prop. Review found that insufficient: local loads set `source` to an empty string, so the toolbar document key collapsed to a single value across every local file and the download name always fell back to `document`. Three further props were authorized and wired, `sourceId`, `docPath`, and `docTitle`, matching the document identity pattern already used for `TocPanel` at `App.tsx:343`. The journal entry at line 26 predates this and describes only the `source` prop.
+The `prompt.md` scope limited `src/entrypoints/reader/App.tsx` to passing the existing `source` value as one new prop. Review found that insufficient: local loads set `source` to an empty string, so the toolbar document key collapsed to a single value across every local file and the download name always fell back to `document`. Three further props were authorized and wired, `sourceId`, `docPath`, and `docTitle`, matching the document identity pattern already used for `TocPanel` at `App.tsx:344`. The SUMMARY at line 26 and the `App.tsx` row in FILES MODIFIED both predate this and describe only the `source` prop.
