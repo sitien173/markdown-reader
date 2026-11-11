@@ -90,6 +90,7 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
     return () => {
       genRef.current++;
       abortRef.current?.abort();
+      onParseErrorRef.current(null);
     };
   }, []);
 

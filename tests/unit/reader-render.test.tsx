@@ -182,6 +182,8 @@ describe('reader shell render scope', () => {
     ).toBe(true);
     expect(bannerContainer?.textContent).toContain('Unexpected token (line 1, column 11)');
     expect(bannerContainer?.querySelector('button')).toBeNull();
+    // The banner sits above the document, and the document still shows the source text
+    expect(contentContainer?.textContent).toContain('{"broken": }');
 
     await act(async () => {
       spy.store.setState({
@@ -231,6 +233,35 @@ describe('JSON preview rendering in App', () => {
         }),
       );
     });
+  });
+
+  it('clears parseError when the reader leaves a JSON document so no stale banner survives', async () => {
+    await act(async () => {
+      spy.store.setState({
+        docKind: 'json',
+        loading: false,
+        text: '{"a": 1,}',
+        mountText: '{"a": 1,}',
+        source: 'file:///data.json',
+      });
+    });
+    await flush();
+    await vi.waitFor(() => {
+      expect(spy.store.getState().parseError).not.toBeNull();
+    });
+
+    await act(async () => {
+      spy.store.setState({
+        docKind: 'markdown',
+        text: '# A',
+        mountText: '# A',
+        source: 'file:///a.md',
+      });
+    });
+    await flush();
+
+    expect(spy.store.getState().parseError).toBeNull();
+    expect(container.querySelector('[data-slot="status-banner"]')).toBeNull();
   });
 });
 

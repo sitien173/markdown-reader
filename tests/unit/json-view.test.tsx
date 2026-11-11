@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { highlight } from '../../src/render/highlight';
 import * as jsonDocument from '../../src/lib/json-document';
+import * as enhanceModule from '../../src/render/enhance';
 import { JsonView } from '../../src/ui/json-view';
 import type { MarkdownViewHandle } from '../../src/ui/markdown-view';
 
@@ -136,8 +137,35 @@ describe('JsonView component', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
 
-    expect(onParseError).not.toHaveBeenCalled();
-    expect(container.innerHTML).toBe('');
+    // Unmount clears the banner, and the late result adds nothing after it
+    expect(onParseError).toHaveBeenCalledTimes(1);
+    expect(onParseError).toHaveBeenCalledWith(null);
+  });
+
+  it('proves unmount aborts the enhance signal', async () => {
+    const captured: { signal?: AbortSignal } = {};
+    vi.spyOn(enhanceModule, 'enhance').mockImplementation((_root, signal) => {
+      captured.signal = signal;
+      return new Promise<void>(() => {});
+    });
+
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    await act(async () => {
+      root.render(<JsonView ref={ref} text='{"a": 1}' kind="json" onParseError={onParseError} />);
+    });
+    // Let prepareJson resolve so enhance runs and captures the signal
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(captured.signal).toBeDefined();
+    expect(captured.signal?.aborted).toBe(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+
+    expect(captured.signal?.aborted).toBe(true);
   });
 
   it('proves update(text) updates the view', async () => {

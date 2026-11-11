@@ -89,8 +89,11 @@ test.afterAll(async () => {
 test('a .json page does not redirect while general.renderJson is off and redirects once enabled', async ({ context, extensionId }) => {
   const doc = await context.newPage();
   await doc.goto(`${origin}/sample.json`);
+  await doc.waitForLoadState('networkidle');
   await doc.waitForTimeout(1000);
   expect(doc.url()).toBe(`${origin}/sample.json`);
+  // The raw payload is still on screen, so no redirect happened
+  expect(await doc.locator('body').textContent()).toContain('hello');
 
   type LocalStorage = {
     chrome: {
