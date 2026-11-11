@@ -1,10 +1,13 @@
 import { isAllowedUrl } from '../source/url';
 import { t } from '../i18n';
+import { isJsonName } from '../lib/doc-kind';
 import { readGeneralFlags } from '../lib/settings-flags';
 
-export function isMarkdownLink(raw: string, renderTxt = false): boolean {
+export function isMarkdownLink(raw: string, renderTxt = false, renderJson = false): boolean {
   try {
-    return isAllowedUrl(raw) && (renderTxt ? /\.(?:md|markdown|txt)$/i : /\.(?:md|markdown)$/i).test(new URL(raw).pathname);
+    if (!isAllowedUrl(raw)) return false;
+    const { pathname } = new URL(raw);
+    return (renderTxt ? /\.(?:md|markdown|txt)$/i : /\.(?:md|markdown)$/i).test(pathname) || (renderJson && isJsonName(pathname));
   } catch {
     return false;
   }
@@ -15,9 +18,10 @@ export function isValidCapture(
   sender: { id?: string; tab?: { url?: string } },
   runtimeId: string,
   renderTxt = false,
+  renderJson = false,
 ): boolean {
   const url = sender.tab?.url;
-  return sender.id === runtimeId && !!url && typeof message.text === 'string' && isMarkdownLink(url, renderTxt);
+  return sender.id === runtimeId && !!url && typeof message.text === 'string' && isMarkdownLink(url, renderTxt, renderJson);
 }
 
 export default defineBackground(() => {
@@ -29,7 +33,7 @@ export default defineBackground(() => {
   browser.contextMenus.onClicked.addListener(async (info) => {
     if (info.menuItemId !== 'open-markdown-reader') return;
     const url = info.linkUrl;
-    if (!url || !isMarkdownLink(url, (await readGeneralFlags()).renderTxt)) {
+    if (!url || !isMarkdownLink(url, (await readGeneralFlags()).renderTxt, true)) {
       await browser.action.setBadgeText({ text: '!' });
       await browser.action.setTitle({ title: 'Markdown Reader: this link is not a supported Markdown URL' });
       return;
@@ -42,7 +46,8 @@ export default defineBackground(() => {
     (message: { action?: string; url?: string; mode?: string; text?: string }, sender, sendResponse) => {
       void (async () => {
         if (message?.action === 'capture-markdown') {
-          if (!isValidCapture(message, sender, browser.runtime.id, (await readGeneralFlags()).renderTxt)) {
+          const flags = await readGeneralFlags();
+          if (!isValidCapture(message, sender, browser.runtime.id, flags.renderTxt, flags.renderJson)) {
             sendResponse({ ok: false });
             return;
           }

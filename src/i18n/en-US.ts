@@ -49,6 +49,8 @@ export const enUS = {
       outlineCollapsingDescription: 'Add expand and collapse toggles to outline headings that have children.',
       renderTxt: 'Render .txt as Markdown',
       renderTxtDescription: 'Also redirect plain text files that end in .txt.',
+      renderJson: 'Preview .json files',
+      renderJsonDescription: 'Also open files that end in .json or .jsonc as highlighted, read-only text.',
       autoRefresh: 'Auto-refresh',
       autoRefreshDescription: 'Reload the document when its file, picked file, or folder changes on disk.',
       autoRefreshRemote: 'Auto-refresh web pages',

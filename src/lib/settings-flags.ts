@@ -1,7 +1,7 @@
 // Zod-free: background.ts and detect.content.ts import this instead of settings.ts so no Zod code reaches their bundles.
 export const SETTINGS_KEY = 'settings:v1';
 
-export type GeneralFlags = { enabled: boolean; renderTxt: boolean; charsetCompat: boolean };
+export type GeneralFlags = { enabled: boolean; renderTxt: boolean; renderJson: boolean; charsetCompat: boolean };
 
 const flag = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback);
 
@@ -17,6 +17,7 @@ export async function readGeneralFlags(): Promise<GeneralFlags> {
   return {
     enabled: flag(general.enabled, true),
     renderTxt: flag(general.renderTxt, false),
+    renderJson: flag(general.renderJson, false),
     charsetCompat: flag(general.charsetCompat, false),
   };
 }

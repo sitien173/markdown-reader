@@ -130,7 +130,14 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
   const toggle = (
     key: keyof Pick<
       Settings['general'],
-      'enabled' | 'outlineCollapsing' | 'renderTxt' | 'autoRefresh' | 'autoRefreshRemote' | 'charsetCompat' | 'showHiddenItems'
+      | 'enabled'
+      | 'outlineCollapsing'
+      | 'renderTxt'
+      | 'renderJson'
+      | 'autoRefresh'
+      | 'autoRefreshRemote'
+      | 'charsetCompat'
+      | 'showHiddenItems'
     >,
   ) => {
     const name = key === 'enabled' ? 'enable' : key;
@@ -223,6 +230,7 @@ export function GeneralTab({ showRenderCurrent = true }: { showRenderCurrent?: b
       </SettingRow>
       {toggle('outlineCollapsing')}
       {toggle('renderTxt')}
+      {toggle('renderJson')}
       {toggle('autoRefresh')}
       {toggle('autoRefreshRemote')}
       <SettingRow

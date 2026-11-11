@@ -11,6 +11,7 @@ describe('settings schema and parsing', () => {
       enabled: true,
       outlineCollapsing: false,
       renderTxt: false,
+      renderJson: false,
       autoRefresh: true,
       autoRefreshRemote: false,
       autoRefreshIntervalSec: 1,
@@ -119,6 +120,12 @@ describe('settings schema and parsing', () => {
     const parsed = parseSettings(raw);
     expect(parsed.general.ignorePatterns).toBe('node_modules/');
     expect(parsed.general.enabled).toBe(false);
+  });
+
+  it('defaults renderJson to false and falls back from a non-boolean stored value', () => {
+    expect(parseSettings({ general: {} }).general.renderJson).toBe(false);
+    expect(parseSettings({ general: { renderJson: 'yes' } }).general.renderJson).toBe(false);
+    expect(parseSettings({ general: { renderJson: true } }).general.renderJson).toBe(true);
   });
 
   it('clamps autoRefreshIntervalSec to 0.5..600', () => {

@@ -15,22 +15,22 @@ describe('readGeneralFlags', () => {
   });
   it('returns the defaults when nothing is stored', async () => {
     stubStorage(undefined);
-    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, charsetCompat: false });
+    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, renderJson: false, charsetCompat: false });
   });
   it('reads stored booleans', async () => {
-    stubStorage({ general: { enabled: false, renderTxt: true, charsetCompat: true } });
-    expect(await readGeneralFlags()).toEqual({ enabled: false, renderTxt: true, charsetCompat: true });
+    stubStorage({ general: { enabled: false, renderTxt: true, renderJson: true, charsetCompat: true } });
+    expect(await readGeneralFlags()).toEqual({ enabled: false, renderTxt: true, renderJson: true, charsetCompat: true });
   });
   it('falls back per field on wrong types', async () => {
-    stubStorage({ general: { enabled: 'no', renderTxt: 1, charsetCompat: true } });
-    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, charsetCompat: true });
+    stubStorage({ general: { enabled: 'no', renderTxt: 1, renderJson: 'yes', charsetCompat: true } });
+    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, renderJson: false, charsetCompat: true });
   });
   it('falls back to defaults when the stored value is not an object', async () => {
     stubStorage('garbage');
-    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, charsetCompat: false });
+    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, renderJson: false, charsetCompat: false });
   });
   it('returns defaults when storage rejects', async () => {
     vi.stubGlobal('browser', { storage: { local: { get: vi.fn(async () => Promise.reject(new Error('x'))) } } });
-    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, charsetCompat: false });
+    expect(await readGeneralFlags()).toEqual({ enabled: true, renderTxt: false, renderJson: false, charsetCompat: false });
   });
 });
