@@ -103,3 +103,33 @@ Fixed the four review findings: schema-valid captured-text test with a Markdown 
 None
 ## NEXT
 TASK_COMPLETE
+
+## Quality Review
+
+Reviewer target `cc/claude-opus-medium`, range `refs/plans/json-preview/phase-02/base..99afc84`, then a re-review of `99afc84..72fbd38`.
+
+First review returned FAIL on two items: the captured-text test stored a session entry that failed `capturedTextSchema` for every document kind, so it passed even without the `kind !== 'markdown'` guard; and the write-path guards were covered only through `load` and `drop`. One fix cycle addressed both, plus two low findings. The re-review returned PASS, confirming each new test fails if its production guard is removed.
+
+## Review Result
+
+- Spec Status: PASS. The phase touched exactly the 18 declared paths and no other; every Done When criterion maps to a test.
+- Quality Status: PASS, after one fix cycle.
+- Debt:
+  - `docKind` is optional in `CommandState` because `src/ui/toolbar.tsx` selects state without it and is outside the Phase 2 file set. A caller omitting the field is treated as Markdown. Harmless today, since the Toolbar renders only outside `read` mode and JSON forces `read`. Owner: Phase 5, which edits the toolbar.
+  - The `docKind` patch is repeated across five load paths in `src/reader/controller.ts`. Owner: Coordinator, optional cleanup at the final audit.
+  - `src/source/directory.ts:294` parses `new URL(resolved).pathname` twice on one line. Owner: Coordinator, optional cleanup at the final audit.
+
+## Verification Evidence
+
+Run fresh at checkpoint `72fbd38`, one at a time:
+
+- `pnpm typecheck` -> exit 0.
+- `pnpm lint` -> exit 0, 0 errors, 208 warnings, 3 infos. Equal to the `c9c2800` baseline.
+- `pnpm test` -> 45 files, 584 tests passed. Phase 1 left 562.
+
+## Final Checkpoint
+
+- Phase base ref: refs/plans/json-preview/phase-02/base
+- Phase implementation ref: refs/plans/json-preview/phase-02/impl
+- Plan commit ref: pending
+- State checkpoint: temporary commits f4eb610, 99afc84, 72fbd38
