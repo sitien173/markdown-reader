@@ -9,6 +9,8 @@ export interface JsonViewProps {
   text: string;
   kind: 'json' | 'jsonc';
   source?: string | null;
+  sourceId?: string | null;
+  docPath?: string | null;
   onParseError(error: JsonParseError | null): void;
 }
 
@@ -36,7 +38,10 @@ function sourceStem(source?: string | null): string {
   }
 }
 
-export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function JsonView({ text, kind, source, onParseError }, ref) {
+export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function JsonView(
+  { text, kind, source, sourceId, docPath, onParseError },
+  ref,
+) {
   const codeContainer = useRef<HTMLDivElement>(null);
   const genRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -44,8 +49,9 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
   onParseErrorRef.current = onParseError;
   const kindRef = useRef(kind);
   kindRef.current = kind;
-  const sourceRef = useRef(source);
-  sourceRef.current = source;
+  // The local picker, drop, and folder tree all leave source empty, so the download name comes from the path first.
+  const nameRef = useRef<string | null | undefined>(docPath || source);
+  nameRef.current = docPath || source;
   const currentPromiseRef = useRef<Promise<void> | null>(null);
 
   const [options, setOptions] = useState<JsonViewOptions>(() => initialOptions(text));
@@ -61,8 +67,11 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
   const unescapedRef = useRef(unescaped);
   unescapedRef.current = unescaped;
 
-  const [prevDocKey, setPrevDocKey] = useState(source ?? text);
-  const currentDocKey = source ?? text;
+  // Document identity, not loadId: auto-refresh keeps the same document and must keep toolbar state.
+  // source is empty for every local document, so it cannot identify one on its own.
+  const identity = `${sourceId ?? ''}\n${docPath ?? ''}`;
+  const currentDocKey = identity === '\n' ? (source ?? text) : identity;
+  const [prevDocKey, setPrevDocKey] = useState(currentDocKey);
   if (prevDocKey !== currentDocKey) {
     setPrevDocKey(currentDocKey);
     const nextOptions = initialOptions(text);
@@ -81,9 +90,12 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
 
       const promise = (async () => {
         let error: JsonParseError | null = null;
+        // The BOM-stripped text is what the banner's line and column refer to, so the error view shows that.
+        let errorViewText = sourceText;
         try {
           const res = await prepareJson(sourceText, currentKind);
           error = res.error;
+          errorViewText = res.text;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           error = { message, line: 1, column: 1 };
@@ -106,7 +118,7 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
           const pre = document.createElement('pre');
           const code = document.createElement('code');
           code.className = currentKind === 'jsonc' ? 'language-jsonc' : 'language-json';
-          code.textContent = sourceText;
+          code.textContent = errorViewText;
           pre.appendChild(code);
           root.replaceChildren(pre);
 
@@ -122,10 +134,14 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
         try {
           unescapeRes = await unescapeJson(sourceText, currentKind);
         } catch (err) {
+          if (gen !== genRef.current || controller.signal.aborted) {
+            return;
+          }
           const message = err instanceof Error ? err.message : String(err);
           onParseErrorRef.current({ message, line: 1, column: 1 });
           setIsParseError(true);
           setCanUnescape(false);
+          setHasComments(false);
           currentDisplayTextRef.current = sourceText;
 
           const root = codeContainer.current;
@@ -138,7 +154,9 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
           root.replaceChildren(pre);
           try {
             await enhance(root, controller.signal);
-          } catch {}
+          } catch {
+            // Ignored on abort or failure
+          }
           return;
         }
 
@@ -160,6 +178,7 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
         let commentsRemaining = false;
         let codeClass = currentKind === 'jsonc' ? 'language-jsonc' : 'language-json';
         let parsedDecoded = true;
+        let transformError: JsonParseError | null = null;
 
         try {
           if (activeUnescaped && unescapeRes) {
@@ -182,20 +201,20 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
             commentsRemaining = res.hasComments;
             codeClass = commentsRemaining ? 'language-jsonc' : 'language-json';
           }
-          onParseErrorRef.current(null);
-          setIsParseError(false);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          onParseErrorRef.current({ message, line: 1, column: 1 });
-          setIsParseError(true);
+          transformError = { message, line: 1, column: 1 };
           displayText = sourceText;
           codeClass = currentKind === 'jsonc' ? 'language-jsonc' : 'language-json';
         }
 
+        // Report only after the generation check, so a stale transform cannot clear or raise a newer banner.
         if (gen !== genRef.current || controller.signal.aborted) {
           return;
         }
 
+        onParseErrorRef.current(transformError);
+        setIsParseError(transformError !== null);
         setDecodedParses(parsedDecoded);
         setHasComments(commentsRemaining);
         currentDisplayTextRef.current = displayText;
@@ -255,12 +274,13 @@ export const JsonView = forwardRef<MarkdownViewHandle, JsonViewProps>(function J
   }, []);
 
   const handleDownload = useCallback(() => {
-    const ext = hasComments ? '.jsonc' : '.json';
-    const stem = sourceStem(sourceRef.current);
+    // On a parse error the original text is downloaded unchanged, so a .jsonc source keeps its comments.
+    const ext = hasComments || (isParseError && kindRef.current === 'jsonc') ? '.jsonc' : '.json';
+    const stem = sourceStem(nameRef.current);
     const filename = `${stem}${ext}`;
     const textToDownload = currentDisplayTextRef.current;
     downloadText(filename, textToDownload, 'application/json;charset=utf-8');
-  }, [hasComments]);
+  }, [hasComments, isParseError]);
 
   return (
     <div data-slot="markdown" className="md-content">

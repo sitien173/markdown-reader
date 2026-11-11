@@ -298,6 +298,115 @@ describe('JsonView component', () => {
     expect(container.querySelector('code')?.textContent).toBe('{\n  "b": 2\n}');
   });
 
+  it('proves two local documents with no source still reset the toolbar', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    await act(async () => {
+      root.render(
+        <JsonView
+          ref={ref}
+          source=""
+          sourceId="local-1"
+          docPath="a.json"
+          text={'{\n  "a": 1\n}'}
+          kind="json"
+          onParseError={onParseError}
+        />,
+      );
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const minifyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Minify');
+    await act(async () => {
+      minifyBtn?.click();
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+    expect(container.querySelector('code')?.textContent).toBe('{"a":1}');
+
+    await act(async () => {
+      root.render(
+        <JsonView
+          ref={ref}
+          source=""
+          sourceId="local-2"
+          docPath="b.json"
+          text={'{\n  "b": 2\n}'}
+          kind="json"
+          onParseError={onParseError}
+        />,
+      );
+    });
+    await act(async () => {
+      await ref.current?.ready();
+    });
+
+    const originalBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Original');
+    expect(originalBtn?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('code')?.textContent).toBe('{\n  "b": 2\n}');
+  });
+
+  it('proves a stale parse error does not reach onParseError after the document changed', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    const real = jsonDocument.prepareJson;
+    let release: (() => void) | null = null;
+    vi.spyOn(jsonDocument, 'prepareJson').mockImplementationOnce(
+      (text: string) =>
+        new Promise((resolve) => {
+          release = () => resolve({ text, error: { message: 'stale boom', line: 9, column: 9 } });
+        }),
+    );
+
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="stale-a.json" text='{"first": 1}' kind="json" onParseError={onParseError} />);
+    });
+
+    vi.mocked(jsonDocument.prepareJson).mockImplementation(real);
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="stale-b.json" text={'{\n  "second": 2\n}'} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      release?.();
+      await ref.current?.ready();
+    });
+
+    expect(onParseError).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'stale boom' }));
+    expect(container.querySelector('code')?.textContent).toBe('{\n  "second": 2\n}');
+  });
+
+  it('proves a stale unescapeJson rejection does not reach onParseError after the document changed', async () => {
+    const ref = createRef<MarkdownViewHandle>();
+    const onParseError = vi.fn();
+    const real = jsonDocument.unescapeJson;
+    let reject: (() => void) | null = null;
+    vi.spyOn(jsonDocument, 'unescapeJson').mockImplementationOnce(
+      () =>
+        new Promise((_resolve, rej) => {
+          reject = () => rej(new Error('stale unescape boom'));
+        }),
+    );
+
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="unesc-a.json" text='{"first": 1}' kind="json" onParseError={onParseError} />);
+    });
+
+    vi.mocked(jsonDocument.unescapeJson).mockImplementation(real);
+    await act(async () => {
+      root.render(<JsonView ref={ref} source="unesc-b.json" text={'{\n  "second": 2\n}'} kind="json" onParseError={onParseError} />);
+    });
+    await act(async () => {
+      reject?.();
+      await ref.current?.ready();
+    });
+
+    expect(onParseError).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'stale unescape boom' }));
+    expect(container.querySelector('code')?.textContent).toBe('{\n  "second": 2\n}');
+  });
+
   it('proves auto-refresh with the same source keeps toolbar state', async () => {
     const ref = createRef<MarkdownViewHandle>();
     const onParseError = vi.fn();

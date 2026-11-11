@@ -473,13 +473,14 @@ function Content({
   viewRef: React.RefObject<MarkdownViewHandle | null>;
   run: RunCommand;
 }) {
-  const { docKind, mode, mountText, loadId, source, loading, directorySource, docPath } = useReaderStore(
+  const { docKind, mode, mountText, loadId, source, sourceId, loading, directorySource, docPath } = useReaderStore(
     useShallow((s) => ({
       docKind: s.docKind,
       mode: s.mode,
       mountText: s.mountText,
       loadId: s.loadId,
       source: s.source,
+      sourceId: s.sourceId,
       loading: s.loading,
       directorySource: s.directorySource,
       docPath: s.docPath,
@@ -536,7 +537,15 @@ function Content({
           {mode !== 'read' && <EditorPane key={loadId} initialText={controller.getDraft()} onChange={onEdit} />}
           {mode !== 'edit' &&
             (isJson ? (
-              <JsonView ref={viewRef} text={mountText} kind={docKind} source={source} onParseError={onParseError} />
+              <JsonView
+                ref={viewRef}
+                text={mountText}
+                kind={docKind}
+                source={source}
+                sourceId={sourceId}
+                docPath={docPath}
+                onParseError={onParseError}
+              />
             ) : (
               <MarkdownView
                 ref={viewRef}
