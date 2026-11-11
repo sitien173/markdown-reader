@@ -7,7 +7,7 @@
 
 ## Context & Architecture
 
-- Code root: `WORKTREE_PATH` | Records root: `/home/ngosi/projects/markdown-reader` | Branch: `refract/json-preview/phase-02` | Base: `refs/plans/json-preview/phase-02/base`
+- Code root: `/home/ngosi/projects/markdown-reader/.worktrees/json-preview-phase-02` | Records root: `/home/ngosi/projects/markdown-reader` | Branch: `refract/json-preview/phase-02` | Base: `refs/plans/json-preview/phase-02/base`
 - Prior State: Phase 1 is complete and merged into your base. It added:
   - `src/lib/doc-kind.ts`, which has zero imports and exports `type DocKind = 'markdown' | 'json' | 'jsonc'`, `docKindFromName(name: string): DocKind`, and `isJsonName(name: string): boolean`. `docKindFromName` tries `new URL(name).pathname` and falls back to the raw name, so both URLs with a query string and bare file names work.
   - `src/lib/json-document.ts` with async `prepareJson`. Phase 2 does not use it.

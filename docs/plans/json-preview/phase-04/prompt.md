@@ -7,7 +7,7 @@
 
 ## Context & Architecture
 
-- Code root: `WORKTREE_PATH` | Records root: `/home/ngosi/projects/markdown-reader` | Branch: `refract/json-preview/phase-04` | Base: `refs/plans/json-preview/phase-04/base`
+- Code root: `/home/ngosi/projects/markdown-reader/.worktrees/json-preview-phase-04` | Records root: `/home/ngosi/projects/markdown-reader` | Branch: `refract/json-preview/phase-04` | Base: `refs/plans/json-preview/phase-04/base`
 - Prior State: Phase 1 is complete and merged into your base. It added:
   - `src/lib/doc-kind.ts`, zero imports, exporting `type DocKind = 'markdown' | 'json' | 'jsonc'`, `docKindFromName`, and `isJsonName`.
   - `src/lib/json-document.ts`, which exports async `prepareJson(text, kind): Promise<{ text: string; error: { message: string; line: number; column: number } | null }>`. It lazy-imports `jsonc-parser` inside the function body with `const { parse, printParseErrorCode, format, applyEdits } = await import('jsonc-parser')`, references the error type as the inline type-only `import('jsonc-parser').ParseError`, strips a leading U+FEFF, and formats with 2-space indentation only when the trimmed text has no line break and parsing succeeded.
