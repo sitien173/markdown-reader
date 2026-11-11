@@ -76,3 +76,30 @@ TASK_COMPLETE
 - Phase implementation ref: refs/plans/json-preview/phase-02/impl
 - Plan commit ref: pending
 - State checkpoint: temporary commit
+
+## Review-fix cycle 1
+
+# EXTERNAL RESPONSE
+## META
+- Phase: 2
+- Started: 2026-11-11T18:58:00+07:00
+- Finished: 2026-11-11T19:02:18+07:00
+- Plan dir: docs/plans/json-preview
+## SUMMARY
+Fixed the four review findings: schema-valid captured-text test with a Markdown control and verified negative case, write-path guard tests for file handle, tree selection, and draft keys, removal of the redundant `isJsonName` drop conjunct, and a `resolveFolderLinks` JSON link test.
+## FILES MODIFIED
+| Action | Path | Change |
+| --- | --- | --- |
+| update | src/reader/controller.ts | Dropped redundant `&& !isJsonName(file.name)` from the drop guard and the unused `isJsonName` import |
+| update | tests/unit/controller.test.ts | Schema-valid captured-text entry, Markdown control, and tests for JSON handle, tree selection, and draft keys |
+| update | tests/unit/links.test.ts | Added `resolveFolderLinks` case for `sub/data.json` |
+| update | docs/plans/json-preview/phase-02/notes.md | Appended `## Review fixes` block |
+| update | docs/plans/json-preview/phase-02/journal.md | Appended this response block |
+## NOTES
+- phase-02/notes.md (## Review fixes; pnpm typecheck passed; pnpm lint 0 errors, 208 warnings, 3 infos; pnpm test 45 files, 584 passed)
+## SPEC COMPLIANCE
+- Meets Spec? YES: all four fixes applied, Fix 1 negative case shown to fail without the guard, checks fresh, no edits to json-document files.
+## CLARIFICATIONS NEEDED
+None
+## NEXT
+TASK_COMPLETE

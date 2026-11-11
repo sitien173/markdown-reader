@@ -59,6 +59,15 @@ describe('link rewriting', () => {
     expect(outside.getAttribute('aria-disabled')).toBe('true');
   });
 
+  it('marks a folder-relative JSON link with data-md-link and data-folder-path', async () => {
+    const doc = new DOMParser().parseFromString('<a href="sub/data.json">data</a>', 'text/html');
+    const { resolveFolderLinks } = await import('../../src/render/links');
+    const link = doc.querySelector('a') as HTMLAnchorElement;
+    resolveFolderLinks(link, 'docs/readme.md');
+    expect(link.hasAttribute('data-md-link')).toBe(true);
+    expect(link.getAttribute('data-folder-path')).toBe('docs/sub/data.json');
+  });
+
   it('cancels superseded image work with AbortSignal and revokes created URL immediately', async () => {
     let revoked = '';
     const fakeUrl = 'blob:test-image-123';

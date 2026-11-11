@@ -113,3 +113,31 @@
   - GREEN: `pnpm vitest run tests/unit/reader-app.test.tsx` -> `Test Files 1 passed (1), Tests 15 passed (15)`
 - Root cause (bugfix only): none
 
+
+## Review fixes
+
+Review-fix cycle 1, from the independent quality review (FAIL).
+
+### Fixes
+- Fix 1 (High), `tests/unit/controller.test.ts`: the captured-text test now stores a schema-valid session entry `{ url, text, ts }` and asserts the URL body is read for a `.json` URL. Added a control case with the same entry shape for a `.md` URL that asserts the captured text is used.
+- Fix 2 (Medium), `tests/unit/controller.test.ts`: added three tests. `openFileHandle` with a `.json` handle gives `writable === false` and `mode === 'read'`, and `save()` never calls `createWritable`. `selectTreeFile` on a `.json` entry gives `docKind === 'json'` and `writable === false`, then a `.md` entry gives `docKind === 'markdown'` and `writable === true`. No `browser.storage.local.set` call uses a `markdown-reader:draft:` key while a JSON source is open, with a Markdown control in the same test showing the probe does record a draft key.
+- Fix 3 (Low), `src/reader/controller.ts`: drop guard is now `!isValidMarkdownFile(file.name)`. The `isJsonName` import was removed because nothing else used it.
+- Fix 4 (Low), `tests/unit/links.test.ts`: added a `resolveFolderLinks` case for `sub/data.json` asserting `data-md-link` and `data-folder-path` equal to `docs/sub/data.json`.
+
+### Negative-case evidence for Fix 1
+- Temporarily changed `src/reader/controller.ts:391` to drop `|| kind !== 'markdown'`.
+- `pnpm vitest run tests/unit/controller.test.ts` -> `1 failed | 41 passed`; failing test `ignores captured session text and reads the URL for JSON documents`, `AssertionError: expected 'captured text should be ignored' to be 'fetched url body of https://example.c…'`.
+- Guard restored; line 391 is byte-identical to the checkpoint and the suite passes.
+
+### Recorded for the record
+- `tests/unit/directory.test.ts:118` changed an existing Markdown test from `not-md.json` to `not-md.txt`. Folders holding only JSON now appear in trees by design, and the pruning assertion keeps the same meaning.
+
+### Accepted debt, not acted on
+- Making `docKind` required in `CommandState` (needs `src/ui/toolbar.tsx`, outside the phase file set).
+- Factoring the repeated `docKind` patch in the load paths into a helper.
+- The double `new URL(resolved).pathname` parse in `src/source/directory.ts:294`.
+
+### Checks
+- `pnpm typecheck`: pass.
+- `pnpm lint`: 0 errors, 208 warnings, 3 infos.
+- `pnpm test`: 584 passed (was 579).

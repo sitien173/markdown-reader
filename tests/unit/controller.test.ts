@@ -820,10 +820,9 @@ describe('JSON documents in controller', () => {
     expect(get().dirty).toBe(false);
   });
 
-  it('ignores captured session text and reads the URL for JSON documents', async () => {
-    const jsonUrl = 'https://example.com/payload.json';
+  function stubCapturedText(url: string) {
     const sessionGet = vi.fn(async (key: string) => ({
-      [key]: { text: 'captured text should be ignored', timestamp: Date.now() },
+      [key]: { url, text: 'captured text should be ignored', ts: Date.now() },
     }));
     vi.stubGlobal('browser', {
       storage: {
@@ -831,10 +830,26 @@ describe('JSON documents in controller', () => {
         session: { get: sessionGet, remove: vi.fn(async () => undefined) },
       },
     });
+    return sessionGet;
+  }
+
+  it('ignores captured session text and reads the URL for JSON documents', async () => {
+    const jsonUrl = 'https://example.com/payload.json';
+    const sessionGet = stubCapturedText(jsonUrl);
     ctl.urlRead = async (url) => `fetched url body of ${url}`;
     await c.load(jsonUrl);
+    expect(sessionGet).toHaveBeenCalled();
     expect(get().docKind).toBe('json');
     expect(get().text).toBe('fetched url body of https://example.com/payload.json');
+  });
+
+  it('uses captured session text for a Markdown URL with the same entry shape', async () => {
+    const mdUrl = 'https://example.com/payload.md';
+    stubCapturedText(mdUrl);
+    ctl.urlRead = async (url) => `fetched url body of ${url}`;
+    await c.load(mdUrl);
+    expect(get().docKind).toBe('markdown');
+    expect(get().text).toBe('captured text should be ignored');
   });
 
   it('does not restore a stored draft for JSON and keeps dirty false', async () => {
@@ -890,5 +905,61 @@ describe('JSON documents in controller', () => {
 
     await c.load('https://example.com/doc2.md');
     expect(get().docKind).toBe('markdown');
+  });
+
+  it('opens a .json handle read-only and never writes on save', async () => {
+    const file = fakeFileHandle('data.json', '{"a":1}');
+    const createWritable = vi.fn(file.handle.createWritable.bind(file.handle));
+    (file.handle as unknown as { createWritable: typeof createWritable }).createWritable = createWritable;
+    await c.openFileHandle(file.handle);
+    expect(get().docKind).toBe('json');
+    expect(get().writable).toBe(false);
+    expect(get().mode).toBe('read');
+    await c.save();
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(file.text()).toBe('{"a":1}');
+  });
+
+  it('selectTreeFile tracks the kind of each selected entry without stale state', async () => {
+    ctl.files['c.json'] = '{"c":1}';
+    ctl.stamps['c.json'] = 300;
+    await c.selectTreeFile('c.json');
+    expect(get().docKind).toBe('json');
+    expect(get().writable).toBe(false);
+    expect(get().mode).toBe('read');
+    await c.selectTreeFile('a.md');
+    expect(get().docKind).toBe('markdown');
+    expect(get().writable).toBe(true);
+  });
+
+  it('never stores a draft key while a JSON source is open', async () => {
+    const local = {
+      get: vi.fn(async () => ({})),
+      set: vi.fn(async (_items: Record<string, unknown>) => undefined),
+      remove: vi.fn(async () => undefined),
+    };
+    vi.stubGlobal('browser', { storage: { local, session: { get: vi.fn(async () => ({})), remove: vi.fn(async () => undefined) } } });
+    const draftKeys = () =>
+      local.set.mock.calls.flatMap(([items]) => Object.keys(items)).filter((k) => k.startsWith('markdown-reader:draft:'));
+    await c.load('https://example.com/data.json');
+    vi.useFakeTimers();
+    try {
+      c.edit('{"tampered": true}');
+      vi.advanceTimersByTime(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush();
+    expect(draftKeys()).toEqual([]);
+    // Control: the same probe sees a draft write for a Markdown source.
+    await c.load('https://example.com/data.md');
+    vi.useFakeTimers();
+    try {
+      c.edit('# edited');
+      vi.advanceTimersByTime(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(draftKeys()).toHaveLength(1);
   });
 });

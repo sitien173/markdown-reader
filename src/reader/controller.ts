@@ -20,7 +20,7 @@ import {
   prefixTreeNodes,
 } from '../source/file-url-tree';
 import { createReaderStore, type Mode, type ReaderStore } from '../store/reader-store';
-import { docKindFromName, isJsonName } from '../lib/doc-kind';
+import { docKindFromName } from '../lib/doc-kind';
 
 type Active = FileHandleSource | FileUrlSource | UrlSource | DirectorySource;
 
@@ -570,7 +570,7 @@ export function createController(store: ReaderStore = createReaderStore(), notif
       const file = await FileHandleSource.fromDrop(item);
       if (!isCurrent(gen, previous, previousId)) return;
       if (file) {
-        if (!isValidMarkdownFile(file.name) && !isJsonName(file.name)) {
+        if (!isValidMarkdownFile(file.name)) {
           set({ error: 'Only Markdown and JSON files are supported' });
           return;
         }
