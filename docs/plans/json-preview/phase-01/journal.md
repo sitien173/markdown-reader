@@ -10,8 +10,8 @@
 - Implementation Profile: balanced
 - Consultation Profile: n/a
 - Review Profile: balanced
-- Implementation Job: pending
-- Review Job: pending
+- Implementation Job: ead5be8d-cca6-4e7c-8e97-0d590b13616f
+- Review Job: bce9645d-7fc4-4fff-bf93-8a47141041cc (retry of d07c5b50-b993-4b5d-ace3-5906eca7abce, which failed transiently with no output)
 - Started: 2026-11-11
 - Finished: 2026-11-11T18:11:37+07:00
 
@@ -56,13 +56,33 @@ TASK_COMPLETE
 
 ## Quality Review
 
-<!-- Coordinator appends the independent review response here. -->
+Reviewer target `cc/claude-opus-medium`, range `refs/plans/json-preview/phase-01/base..HEAD`.
+
+# CODE QUALITY REVIEW
+- Status: PASS_WITH_DEBT
+- Findings:
+  - Low, non-blocking, `src/entrypoints/background.ts:36`: the context menu always passes `renderJson` as `true`, as PLAN.md task 3 requires. Phase 1 adds no JSON rendering, so on this branch a `.json` link opened from the context menu renders through the Markdown path. Output still passes through `sanitize()`, so this is not a security issue. Resolved when Phase 3 lands `JsonView`.
+  - Info, non-blocking, `src/entrypoints/background.ts:38`: the badge title still reads "this link is not a supported Markdown URL" although JSON links are now accepted.
+  - Checklist items 1 to 7 all met; every acceptance criterion appears in the new or updated tests.
+- Scope checked: the full Phase 1 delta. Working tree left unchanged.
 
 ## Review Result
 
-- Spec Status: PENDING
-- Quality Status: PENDING
-- Debt: none
+- Spec Status: PASS. Every declared path was touched and no other; every acceptance criterion maps to a test.
+- Quality Status: PASS_WITH_DEBT
+- Debt:
+  - Context-menu JSON links render through the Markdown path until `JsonView` lands. Owner: Coordinator, confirmed at the final audit after Phase 3.
+  - Badge title still names Markdown only. Owner: Phase 5, which already edits `src/i18n/en-US.ts`.
+
+## Verification Evidence
+
+Run fresh at checkpoint `ceb9188`, one at a time:
+
+- `pnpm typecheck` -> exit 0.
+- `pnpm lint` -> exit 0, 0 errors, 208 warnings, 3 infos. Equal to the `c9c2800` baseline.
+- `pnpm test` -> 45 files, 562 tests passed. Baseline was 44 files, 543 tests.
+
+Coordinator-checked invariants: `jsonc-parser` pinned to `3.3.1`; no static import of it anywhere in `src/` or `tests/`; `src/lib/doc-kind.ts` has zero imports; `settings-flags.ts`, `detect.content.ts`, and `background.ts` contain no reference to Zod or `jsonc-parser`.
 
 ## Final Checkpoint
 
