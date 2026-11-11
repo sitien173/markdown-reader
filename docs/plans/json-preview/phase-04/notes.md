@@ -106,3 +106,23 @@ Very deep nesting raises `RangeError` from both `prepareJson` and `transformJson
   - `pnpm typecheck` -> pass
   - `pnpm lint` -> exit 0, 208 warnings, 3 infos
   - `pnpm test` -> 45 files, 608 passed (previously 602)
+
+## Review fixes, cycle 2
+
+Final cycle. One partially fixed item from cycle 1 (finding 4, strip). Edits are in `src/lib/json-document.ts` and `tests/unit/json-document.test.ts` only. `prepareJson` and the 12 original tests are unchanged.
+
+- Fix: strip now drops the `Trivia` before a removed comment only when the comment is trailing, meaning only spaces and other comments separate it from a line break or EOF (new helper `isTrailingComment`). The `Trivia` after a removed comment is always dropped. A leading comment therefore keeps the line's original indentation, and a trailing comment leaves no trailing space.
+- Probe: `'{\n  /* c */ "a": 1\n}'` now strips to `'{\n  "a": 1\n}'`.
+- Test `strip drops the trivia before a removed comment` now expects `'{\n  "a": 1,\n'`.
+- New test `strip keeps the indent after a leading block comment and leaves no trailing space` covers a leading block comment, a trailing line comment, and a trailing block comment followed by spaces.
+
+### Accepted debt, not changed
+- A comment occupying a whole line leaves a blank line: `'{\n  // c\n  "a": 1\n}'` strips to `'{\n\n  "a": 1\n}'`. Cosmetic and out of scope.
+- CRLF normalization: the `original` view and the escape output of a CRLF source differ from the source bytes, and `prepareJson(...).text` keeps CRLF, so it does not match the `transformJson` original view. Deliberate. Phase 5 is informed.
+
+### Test evidence
+- Typecheck first failed on `noUncheckedIndexedAccess` in the new helper; fixed with local variables.
+- Final checks, run one at a time from the repository root:
+  - `pnpm typecheck` -> pass
+  - `pnpm lint` -> exit 0, 208 warnings, 3 infos
+  - `pnpm test` -> 45 files, 609 passed (previously 608)

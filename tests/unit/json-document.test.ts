@@ -155,7 +155,13 @@ describe('transformJson strip and sort', () => {
   it('strip drops the trivia before a removed comment', async () => {
     const source = '{\n  /* block */ "a": 1, // line\n';
     const result = await transformJson(source, 'jsonc', view({ stripComments: true }));
-    expect(result).toEqual({ text: '{\n "a": 1,\n', hasComments: false });
+    expect(result).toEqual({ text: '{\n  "a": 1,\n', hasComments: false });
+  });
+  it('strip keeps the indent after a leading block comment and leaves no trailing space', async () => {
+    const leading = await transformJson('{\n  /* c */ "a": 1\n}', 'jsonc', view({ stripComments: true }));
+    expect(leading.text).toBe('{\n  "a": 1\n}');
+    const trailing = await transformJson('{\n  "a": 1, // c  \n  "b": 2 /* d */  \n}', 'jsonc', view({ stripComments: true }));
+    expect(trailing.text).toBe('{\n  "a": 1,\n  "b": 2\n}');
   });
   it('keeps number text, escapes, and duplicate keys byte-exact through sort and strip', async () => {
     const source = '{"z":12345678901234567890,"e":1.0e+2,"n":-0,"s":"\\u00e9é","a":1,"a":2}';

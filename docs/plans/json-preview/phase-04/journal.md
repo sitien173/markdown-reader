@@ -81,3 +81,27 @@ Fixed all seven review findings in `src/lib/json-document.ts` and its tests; the
 None
 ## NEXT
 TASK_COMPLETE
+
+### Review Fix Cycle 2 Response
+
+# EXTERNAL RESPONSE
+## META
+- Phase 4 / Started 2026-11-11T19:10:00+07:00 / Finished 2026-11-11T19:17:00+07:00 / Plan dir docs/plans/json-preview
+## SUMMARY
+Strip now drops the trivia before a removed comment only for a trailing comment, so a leading comment keeps its original indentation.
+## FILES MODIFIED
+| Action | Path | Change |
+| --- | --- | --- |
+| Modify | src/lib/json-document.ts | `isTrailingComment` helper; strip keeps the preceding trivia of a leading comment and always drops the trivia after a comment |
+| Modify | tests/unit/json-document.test.ts | Corrected expected indent in the strip trivia test; added leading-indent and trailing-space test |
+| Modify | docs/plans/json-preview/phase-04/notes.md | `## Review fixes, cycle 2` block |
+| Modify | docs/plans/json-preview/phase-04/journal.md | This response |
+## NOTES
+- phase-04/notes.md  (## Review fixes, cycle 2)
+- Fresh checks: typecheck pass; lint exit 0 with 208 warnings, 3 infos; test 45 files, 609 passed
+## SPEC COMPLIANCE
+- Meets Spec? WITH_DEBT: whole-line comment leaves a blank line, and CRLF source bytes differ from the original view; both accepted and recorded in notes.md
+## CLARIFICATIONS NEEDED
+None
+## NEXT
+TASK_COMPLETE

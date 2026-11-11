@@ -52,6 +52,13 @@ type Jsonc = typeof import('jsonc-parser');
 const isComment = (kind: number): boolean => kind === LINE_COMMENT || kind === BLOCK_COMMENT;
 const isTrivia = (kind: number): boolean => isComment(kind) || kind === LINE_BREAK || kind === TRIVIA;
 
+/** True when only spaces and other comments separate the comment at `index` from a line break or EOF. */
+function isTrailingComment(tokens: { kind: number }[], index: number): boolean {
+  let next = tokens[index + 1];
+  for (let j = index + 2; next && (next.kind === TRIVIA || isComment(next.kind)); j++) next = tokens[j];
+  return !next || next.kind === LINE_BREAK;
+}
+
 function hasCommentTokens({ createScanner }: Jsonc, text: string): boolean {
   const scanner = createScanner(text, false);
   for (let kind = scanner.scan(); kind !== EOF; kind = scanner.scan()) if (isComment(kind)) return true;
@@ -66,9 +73,12 @@ function strip({ createScanner }: Jsonc, text: string): string {
   let out = '';
   tokens.forEach(({ kind, start, end }, i) => {
     if (isComment(kind)) return;
-    // Trivia directly before a comment sits on the comment's line, so it goes with the comment.
+    // Trivia after a comment always goes. Trivia before it goes only for a trailing comment,
+    // so a leading comment leaves the line's indentation intact.
+    const previous = tokens[i - 1];
     const following = tokens[i + 1];
-    if (kind === TRIVIA && following && isComment(following.kind)) return;
+    if (kind === TRIVIA && previous && isComment(previous.kind)) return;
+    if (kind === TRIVIA && following && isComment(following.kind) && isTrailingComment(tokens, i + 1)) return;
     if (kind === COMMA) {
       let next = following;
       for (let j = i + 2; next && isTrivia(next.kind); j++) next = tokens[j];
